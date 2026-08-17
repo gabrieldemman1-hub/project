@@ -1,0 +1,70 @@
+@import 'tailwindcss';
+
+/* Self-hosted fonts. Never a CDN — a webfont fetched over the network is a
+   blank screen in airplane mode, and Part 2 says every interaction must work
+   offline. */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/space-grotesk';
+
+/* Theme generated from src/styles/tokens.ts. See scripts/generate-tokens-css.ts. */
+@import './tokens.generated.css';
+
+@layer base {
+  html {
+    background-color: var(--color-bg);
+    /* Stops iOS from scaling text up in landscape. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-text);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    letter-spacing: var(--tracking-wide);
+    -webkit-font-smoothing: antialiased;
+    /* Part 7 quality floor: respect the iPhone's safe areas. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    /* The app owns its own scrolling; the page itself never bounces. */
+    overscroll-behavior-y: none;
+  }
+
+  /* Numbers are the content. Tabular figures so digits do not jump width as
+     they change — critical for the rest timer counting down. */
+  .num {
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--leading-tight);
+  }
+
+  /* Part 7 quality floor: focus must be visible, and it uses the one accent. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: var(--radius-sm);
+  }
+
+  button {
+    /* Removes the iOS tap flash so our own active states are the only feedback. */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/* Part 7: restrained motion, and none at all if the OS asks for none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

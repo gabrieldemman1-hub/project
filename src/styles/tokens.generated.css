@@ -1,0 +1,105 @@
+/*
+ * GENERATED FILE — DO NOT EDIT.
+ * Produced from src/styles/tokens.ts by scripts/generate-tokens-css.ts.
+ * Edit the tokens there and this regenerates automatically.
+ */
+
+@theme {
+  /* color */
+  --color-bg: #0A0A0B;
+  --color-surface: #121214;
+  --color-surface-raised: #1A1A1D;
+  --color-border: #232327;
+  --color-border-strong: #33333A;
+  --color-accent: #EEF3FF;
+  --color-text: #EEF3FF;
+  --color-text-secondary: #8A8A93;
+  --color-text-muted: #56565E;
+  --color-on-accent: #0A0A0B;
+  --color-alert: #C25A50;
+  --color-alert-surface: #2A1614;
+
+  /* shadow */
+  --shadow-soft: 0 0 0 1px rgba(238,243,255,0.10), 0 0 24px -6px rgba(238,243,255,0.22);
+  --shadow-strong: 0 0 0 1px rgba(238,243,255,0.22), 0 0 40px -8px rgba(238,243,255,0.42), 0 0 80px -20px rgba(238,243,255,0.30);
+  --shadow-ring: 0 0 32px -4px rgba(238,243,255,0.35);
+  --shadow-alert: 0 0 0 1px rgba(194,90,80,0.30), 0 0 28px -8px rgba(194,90,80,0.35);
+  --shadow-none: none;
+
+  /* spacing */
+  --spacing-0: 0px;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --spacing-20: 80px;
+  --spacing-24: 96px;
+
+  /* spacing */
+  --spacing-touch-min: 44px;
+  --spacing-touch-comfortable: 56px;
+  --spacing-control: 64px;
+
+  /* container */
+  --container-tight: 24ch;
+  --container-base: 30ch;
+  --container-wide: 38ch;
+
+  /* radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-full: 9999px;
+
+  /* font */
+  --font-numeric: 'Space Grotesk Variable', 'Space Grotesk', ui-monospace, monospace;
+  --font-text: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* text */
+  --text-micro: 11px;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 44px;
+  --text-4xl: 60px;
+  --text-5xl: 80px;
+
+  /* font-weight */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* tracking */
+  --tracking-tight: -0.03em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.04em;
+  --tracking-wider: 0.12em;
+
+  /* leading */
+  --leading-tight: 1.0;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* ease */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* duration */
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+}

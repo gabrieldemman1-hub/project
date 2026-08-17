@@ -267,8 +267,8 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 
 | Phase | Status |
 |---|---|
-| Plan | ✅ Awaiting your approval |
-| 1 — Skeleton and data layer | ⬜ Not started |
+| Plan | ✅ Approved |
+| 1 — Skeleton and data layer | ✅ Complete — 41 tests passing, build passing, screenshots captured |
 | 2 — Logging | ⬜ Not started |
 | 3 — Engine | ⬜ Not started |
 | 4 — Engine wired in | ⬜ Not started |
@@ -279,4 +279,51 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 
 ### Modified files
 
-_Planning only so far: `BRIEF.md`, `CLAUDE.md`, `PLAN.md`._
+**Planning:** `BRIEF.md`, `CLAUDE.md`, `PLAN.md`
+
+**Phase 1:**
+```
+index.html · package.json · tsconfig.json · tsconfig.app.json
+tsconfig.node.json · vite.config.ts · .gitignore
+
+scripts/generate-tokens-css.ts   tokens.ts → Tailwind theme, as a Vite plugin
+scripts/print-program.ts         Phase 1 gate — prints the seeded program
+scripts/screenshot.ts            390×844 capture + Part 7 quality-floor audit
+
+src/main.tsx · src/App.tsx
+src/styles/tokens.ts             single source of truth for every visual value
+src/styles/index.css             base layer, self-hosted fonts, reduced motion
+src/styles/tokens.generated.css  generated — do not edit
+src/db/schema.ts · db.ts · seed.ts · queries.ts
+src/lib/date.ts · schedule.ts · ids.ts
+src/components/Screen.tsx · Card.tsx · Button.tsx
+src/features/home/HomeScreen.tsx
+src/test/setup.ts
+src/lib/date.test.ts · src/lib/schedule.test.ts · src/db/seed.test.ts
+
+screenshots/home-training-day.png · home-rest-day.png
+```
+
+### Phase 1 notes
+
+Three defects were found and fixed during the phase, all by the tests or the
+screenshot audit rather than by reading the code:
+
+1. `fromIsoDate` returned an Invalid Date for malformed input instead of
+   throwing, because `Number('not')` is `NaN` rather than `undefined`. `NaN`
+   dates would have spread silently through every downstream calculation. Now
+   validated by pattern and by round-trip, so `2026-02-30` is rejected rather
+   than rolling forward into March.
+2. The primary action was rendering below the fold. A flex child with
+   `overflow-y-auto` and no `min-h-0` grows to fit its content instead of
+   scrolling, so the shell exceeded the viewport. `Screen` now pins to `h-dvh`
+   with `min-h-0` on the scroll region, and `scripts/screenshot.ts` asserts the
+   action is on-screen and in the bottom third so it cannot regress unseen.
+3. Exercise names were truncating mid-word ("Incline hammer strength…"). Names
+   now wrap.
+
+Two deliberate deviations from the original plan, both minor: touch sizes are
+emitted into Tailwind's `spacing` namespace rather than a `size` one, because
+v4 has no size namespace for `min-h-*`; and `scripts/screenshot.ts` falls back
+to a pre-installed Chromium when the CI image ships a different revision to the
+one Playwright bundles.
