@@ -275,8 +275,8 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 | 2 — Logging | ✅ Complete — 88 tests passing, kill-and-resume proven in a real browser, deployed |
 | 3 — Engine | ✅ Complete — 41 spec-derived tests, all rules covered |
 | 4 — Engine wired in | ✅ Complete — prompts, prescriptions, sentences live; walkthrough + browser proof passing |
-| 5 — Mesocycle and deload | ⬜ Not started |
-| 6 — History | ⬜ Not started |
+| 5 — Mesocycle and deload | ✅ Complete — six-week simulation gate passing |
+| 6 — History | ✅ Complete — three charts, screenshot gate with realistic data |
 | 7 — PWA and backup | ⬜ Not started |
 | 8 — Polish | ⬜ Not started |
 
@@ -402,6 +402,43 @@ early. Past days show their verdict (completed with set count and cardio,
 skipped, unfinished, or not trained); the week indicator follows the viewed
 date. Verified in the browser proof: forward to Day B, back to the rest day,
 and home again, with the Start button only ever on today.
+
+**Phase 5:**
+```
+src/db/mutations.ts        + startNewMesocycle; history skips deloads; guard
+                           resets at block boundaries
+src/db/queries.ts          greyed targets skip deloads
+src/features/home/HomeScreen.tsx   Start new block state (A-4)
+src/db/mesocycle.test.ts   the gate: six weeks simulated end to end
+```
+
+**Phase 6:**
+```
+src/features/history/HistoryScreen.tsx   three charts, tokens-only colour
+src/db/queries.ts          + getHistoryView (batched reads)
+src/db/history.test.ts     top weight / volume / set count math
+src/lib/router.ts          + /history · src/App.tsx lazy-loads the chart chunk
+scripts/shoot-history.ts   the gate: realistic five-week seed + screenshots
+screenshots/history-charts*.png
+```
+
+### Phase 5+6 notes
+
+- Deload sessions are invisible to progression, to the greyed targets, and
+  to the increase guard's memory: week one of a new block starts from the
+  deload week's pre-deload set counts at the last working weight, the second
+  deload day halves from week five, and the guard resets across the block
+  boundary (§2.5).
+- The block never rolls over on its own (A-4). After week six the home
+  screen's one action is Start new block.
+- Recharts rides in its own lazily-loaded chunk (~370 kB) so the brief's
+  three-second cold-open budget never pays for charts; the main bundle
+  stayed at ~330 kB.
+- Two layout/framework traps found by gates this round: the exercise-picker
+  scroll row collapsed to its padding inside the screen's flex column
+  (min-height:0 on scroll containers; shrink-0 now load-bearing), and the
+  history query briefly reintroduced a sequential late read before being
+  folded back into the Promise.all batch the live-query rule demands.
 
 ### Phase 3+4 review, and what it changed
 
