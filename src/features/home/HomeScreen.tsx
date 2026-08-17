@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 
 import { Button } from '../../components/Button'
@@ -50,35 +50,20 @@ export function HomeScreen() {
 
   const view = useLiveQuery(() => getTodayView(date), [date])
 
-  // Horizontal swipe steps days; a mostly-vertical drag is list scrolling and
-  // must never change the day.
-  const touchStart = useRef<{ x: number; y: number } | null>(null)
-  function onTouchStart(event: React.TouchEvent) {
-    const t = event.touches[0]
-    touchStart.current = t ? { x: t.clientX, y: t.clientY } : null
-  }
-  function onTouchEnd(event: React.TouchEvent) {
-    const start = touchStart.current
-    touchStart.current = null
-    const end = event.changedTouches[0]
-    if (!start || !end) return
-    const dx = end.clientX - start.x
-    const dy = end.clientY - start.y
-    if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return
-    setOffset(offset + (dx < 0 ? 1 : -1))
-  }
-
   if (!view) return <Screen>{null}</Screen>
 
+  /*
+   * Swipe-to-change-day is gone (owner request, from real use). A horizontal
+   * swipe and a vertical scroll are the same gesture until the finger has
+   * already moved, so resting a thumb on the screen could quietly change the
+   * day you were reading. Every navigation in this app is now a deliberate tap
+   * on a named control.
+   */
   const nav = { offset, isToday, setOffset }
-  return (
-    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="contents">
-      {view.template ? (
-        <TrainingDay view={view} today={today} nav={nav} />
-      ) : (
-        <RestDay view={view} nav={nav} />
-      )}
-    </div>
+  return view.template ? (
+    <TrainingDay view={view} today={today} nav={nav} />
+  ) : (
+    <RestDay view={view} nav={nav} />
   )
 }
 
@@ -187,7 +172,7 @@ function TrainingDay({
   today: string
   nav: DayNavState
 }) {
-  const { template, exercises, position, streak, date, session, unfinishedSession } = view
+  const { template, exercises, position, date, session, unfinishedSession } = view
   const [starting, setStarting] = useState(false)
   if (!template) return null
 
@@ -293,14 +278,19 @@ function TrainingDay({
         <span className="num">{view.cardioMinutes}</span> min walk after
       </p>
 
-      {/* One line per exercise, so the whole workout fits above the action
-          bar on a phone (owner report: the old three-line cards forced a
-          scroll just to see what the day holds). Muscle group and rest time
-          live on the session screen, where they matter; here the question is
-          only "what am I doing today". Names still wrap, never truncate. */}
-      <ul className="mt-3 flex flex-col gap-2">
+      {/*
+       * One line per exercise, so the whole workout is visible at once. The
+       * list is the *only* scroller in the app (owner request): it owns its
+       * own overflow, so a long day scrolls the list while the header, the
+       * counts and the action bar stay exactly where they are. At the seeded
+       * 4–5 exercises nothing scrolls at all.
+       *
+       * min-h-0 is load-bearing on a flex child that scrolls — without it the
+       * list grows to fit its content and pushes the screen instead.
+       */}
+      <ul className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain">
         {exercises.map((exercise, index) => (
-          <li key={exercise.id}>
+          <li key={exercise.id} className="shrink-0">
             <Card className="flex items-center gap-4 px-4 py-2">
               <span className="num w-5 shrink-0 text-sm text-text-muted">
                 {index + 1}
@@ -323,13 +313,16 @@ function TrainingDay({
         <button
           type="button"
           onClick={() => void skipToday(date)}
-          className="mt-4 min-h-touch-min w-full rounded-md text-xs tracking-wider text-text-muted uppercase"
+          className="mt-3 min-h-touch-min w-full shrink-0 rounded-md text-xs tracking-wider text-text-muted uppercase"
         >
           Skip today
         </button>
       ) : null}
 
-      {nav.isToday ? <Streak streak={streak} /> : null}
+      {/* No streak or History/Settings row here any more: the dashboard is one
+          tap away and carries all three pinned in its own footer. Repeating
+          them cost this screen ~70px it needs for the workout. */}
+      {nav.isToday ? <VersionStamp /> : null}
     </Screen>
   )
 }
@@ -382,7 +375,7 @@ function RestDay({ view, nav }: { view: TodayView; nav: DayNavState }) {
         ) : null}
       </div>
 
-      {nav.isToday ? <Streak streak={view.streak} /> : null}
+      {nav.isToday ? <VersionStamp /> : null}
     </Screen>
   )
 }
@@ -447,39 +440,15 @@ function Header({
   )
 }
 
-function Streak({ streak }: { streak: number }) {
+/**
+ * Which build the phone is running. Kept on this screen (and in Settings) so
+ * a cached page and a fresh deploy can be told apart at a glance — the reason
+ * it has existed since Phase 1.
+ */
+function VersionStamp() {
   return (
-    <div className="mt-10">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xs tracking-wider text-text-secondary uppercase">
-          {streak === 0 ? (
-            'No streak yet'
-          ) : (
-            <>
-              <span className="num text-text">{streak}</span> day streak
-            </>
-          )}
-        </p>
-        <span className="flex shrink-0 items-center">
-          <button
-            type="button"
-            onClick={() => navigate('/history')}
-            className="min-h-touch-min rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
-          >
-            History ›
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/settings')}
-            className="min-h-touch-min rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
-          >
-            Settings ›
-          </button>
-        </span>
-      </div>
-      <p className="mt-2 text-micro tracking-wider text-text-muted uppercase">
-        {APP_VERSION}
-      </p>
-    </div>
+    <p className="mt-3 shrink-0 text-micro tracking-wider text-text-muted uppercase">
+      {APP_VERSION}
+    </p>
   )
 }

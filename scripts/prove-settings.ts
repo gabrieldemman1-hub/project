@@ -34,6 +34,18 @@ function check(label: string, ok: boolean) {
   if (!ok) failures += 1
 }
 
+/** Fails if the shell's scroll region overflows — every screen must fit. */
+async function checkFits(page: Page, label: string) {
+  const overflow = await page.evaluate(() => {
+    const main = document.querySelector('main')
+    return main ? Math.max(0, main.scrollHeight - main.clientHeight) : 0
+  })
+  check(
+    `${label} fits without scrolling${overflow > 1 ? ` — ${overflow}px past the fold` : ''}`,
+    overflow <= 1,
+  )
+}
+
 async function bg(page: Page): Promise<string> {
   return page.evaluate(() => getComputedStyle(document.body).backgroundColor)
 }
@@ -71,11 +83,15 @@ async function main(): Promise<void> {
     await page.getByRole('button', { name: 'Settings' }).click()
     await page.getByText('Exercise library').waitFor()
 
-    // Backup, theme and the lock are open on arrival; the long lists are
-    // folded, so the things you actually came for are not behind a scroll.
+    // Every section arrives folded, so all six are on one screen and nothing
+    // is behind a scroll.
     check(
-      'backup is reachable without scrolling past the lists',
-      await page.getByRole('button', { name: 'Export backup' }).isVisible(),
+      'all six sections are visible at once',
+      (await page.getByRole('group').count()) === 6,
+    )
+    check(
+      'and their panels are shut until tapped',
+      !(await page.getByRole('button', { name: 'Export backup' }).isVisible()),
     )
     // Scoped to list rows: the same name also sits in every day's hidden
     // <select>, and an <option> is never "visible" to a browser driver.
@@ -84,6 +100,11 @@ async function main(): Promise<void> {
       .filter({ hasText: 'Lateral raise dumbbells' })
     check('the twenty-row library starts folded', !(await libraryRow.isVisible()))
     await page.screenshot({ path: resolve(OUT_DIR, 'settings.png') })
+    await checkFits(page, 'settings on arrival')
+
+    await page.getByText('Backup', { exact: true }).click()
+    await page.getByRole('button', { name: 'Export backup' }).waitFor()
+    check('tapping a section opens it in place', true)
 
     await page.getByText('Exercise library').click()
     await libraryRow.waitFor()
@@ -108,7 +129,8 @@ async function main(): Promise<void> {
     const darkBg = await bg(page)
     await page.getByRole('button', { name: '‹ Dashboard' }).click()
     await page.getByRole('button', { name: 'Settings' }).click()
-    await page.getByRole('button', { name: 'light' }).click()
+    await page.getByText('Appearance').click()
+    await page.getByRole('button', { name: 'light theme' }).click()
     await page.waitForFunction(
       (previous) => getComputedStyle(document.body).backgroundColor !== previous,
       darkBg,
@@ -119,7 +141,7 @@ async function main(): Promise<void> {
     // so the evidence shows the settled theme, not a mid-transition frame.
     await page.waitForTimeout(400)
     await page.screenshot({ path: resolve(OUT_DIR, 'settings-light.png') })
-    await page.getByRole('button', { name: 'dark', exact: true }).click()
+    await page.getByRole('button', { name: 'dark theme' }).click()
     await page.waitForFunction(
       (previous) => getComputedStyle(document.body).backgroundColor !== previous,
       lightBg,
@@ -127,6 +149,7 @@ async function main(): Promise<void> {
     check('dark mode returns', (await bg(page)) === darkBg)
 
     console.log('\nLOCK — a fresh open is gated; the PIN never leaves the phone')
+    await page.getByText('App lock').click()
     await page.getByLabel('New PIN').fill('4711')
     await page.getByLabel('Confirm PIN').fill('4711')
     await page.getByLabel('PIN hint').fill('the answer')

@@ -19,8 +19,11 @@ export function Button({
   children: ReactNode
   variant?: Variant
 } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  // No press-scale: the owner reported things "moving when I touch my finger",
+  // and a button that shrinks under the thumb is exactly that. Press feedback
+  // is carried by colour alone.
   const base =
-    'w-full rounded-xl font-medium tracking-wide transition-[transform,box-shadow,background-color,color] active:scale-[0.99] disabled:active:scale-100'
+    'w-full rounded-xl font-medium tracking-wide transition-[box-shadow,background-color,color]'
 
   // A disabled primary keeps its shape and a trace of the glow rather than
   // fading to a grey slab — it should read as "not yet", not as broken.

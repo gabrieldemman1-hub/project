@@ -48,20 +48,23 @@ export function SettingsScreen() {
       <p className="text-xs tracking-wider text-text-secondary uppercase">Settings</p>
 
       {/*
-       * Ordered by how often it is actually opened, and the long lists are
-       * folded shut. Backup, theme and the lock used to sit at the bottom
-       * behind three day editors and a twenty-row library — everything you
-       * came here for was a scroll away from everything you didn't.
+       * Every section starts folded, so the whole of Settings is one screen of
+       * six labelled rows: tap the one you want and it opens in place. Nothing
+       * here scrolls on arrival (owner request), and the sections you visit
+       * most are the ones you reach first.
        */}
-      <Section title="Backup" defaultOpen>
+      <Section title="Backup" summary={backupSummary(view)}>
         <BackupManager view={view} />
       </Section>
 
-      <Section title="Appearance" defaultOpen>
+      <Section title="Appearance" summary={view.settings?.theme ?? 'dark'}>
         <ThemeToggle current={view.settings?.theme ?? 'dark'} />
       </Section>
 
-      <Section title="App lock" defaultOpen>
+      <Section
+        title="App lock"
+        summary={view.settings?.appLock ? 'on' : 'off'}
+      >
         <LockManager view={view} />
       </Section>
 
@@ -90,40 +93,41 @@ export function SettingsScreen() {
   )
 }
 
+/** One line for the Backup row while it is shut. */
+function backupSummary(view: SettingsView): string {
+  const at = view.settings?.lastBackupAt
+  return at === undefined ? 'never' : formatLongDate(toIsoDate(new Date(at)))
+}
+
 /**
- * A collapsible section. Built on <details>, so keyboard, screen readers and
- * find-in-page all work with no state of our own; sections holding long lists
- * open on demand and say how much they hold while shut.
+ * A collapsible section, built on <details> so keyboard, screen readers and
+ * find-in-page all work with no state of our own. Shut, it is a row that names
+ * itself and what it holds; open, it is the panel. Every one starts shut so
+ * Settings arrives as a single screen you tap into rather than scroll through.
  */
 function Section({
   title,
   summary,
-  defaultOpen = false,
   children,
 }: {
   title: string
   /** Shown beside the title while collapsed, e.g. "20 movements". */
   summary?: string
-  defaultOpen?: boolean
   children: React.ReactNode
 }) {
   return (
-    <details className="mt-8 group" open={defaultOpen}>
+    <details className="group mt-4 border-b border-border pb-2">
       <summary className="flex min-h-touch-min cursor-pointer list-none items-center justify-between gap-3">
         <h2 className="text-xs tracking-wider text-text-secondary uppercase">{title}</h2>
-        <span className="flex shrink-0 items-center gap-2">
-          {summary ? (
-            <span className="text-micro tracking-wider text-text-muted uppercase">
-              {summary}
-            </span>
-          ) : null}
-          <span className="num text-base text-text-secondary group-open:hidden">+</span>
-          <span className="num hidden text-base text-text-secondary group-open:inline">
+        <span className="flex shrink-0 items-center gap-3">
+          {summary ? <span className="text-xs text-text-muted">{summary}</span> : null}
+          <span className="text-base text-text-secondary group-open:hidden">+</span>
+          <span className="hidden text-base text-text-secondary group-open:inline">
             −
           </span>
         </span>
       </summary>
-      <div className="mt-3 flex flex-col gap-3">{children}</div>
+      <div className="mt-3 flex flex-col gap-3 pb-2">{children}</div>
     </details>
   )
 }
@@ -549,6 +553,10 @@ function ThemeToggle({ current }: { current: Theme }) {
         <button
           key={theme}
           type="button"
+          // Explicit label: the collapsed Appearance row also shows the word
+          // "dark"/"light", and two things answering to the same name is a
+          // trap for anything selecting by accessible name.
+          aria-label={`${theme} theme`}
           onClick={() => void setTheme(theme)}
           // The selected option is tinted rather than merely "raised": in the
           // light theme `surfaceRaised` is a grey and `surface` is pure white,

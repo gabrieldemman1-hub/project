@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { chromium } from '@playwright/test'
+import { chromium, type Page } from '@playwright/test'
 import { preview } from 'vite'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -35,6 +35,18 @@ let failures = 0
 function check(label: string, ok: boolean) {
   console.log(`  ${ok ? '✓' : '✗'} ${label}`)
   if (!ok) failures += 1
+}
+
+/** Fails if the shell's scroll region overflows — every screen must fit. */
+async function checkFits(page: Page, label: string) {
+  const overflow = await page.evaluate(() => {
+    const main = document.querySelector('main')
+    return main ? Math.max(0, main.scrollHeight - main.clientHeight) : 0
+  })
+  check(
+    `${label} fits without scrolling${overflow > 1 ? ` — ${overflow}px past the fold` : ''}`,
+    overflow <= 1,
+  )
 }
 
 async function main(): Promise<void> {
@@ -169,6 +181,7 @@ async function main(): Promise<void> {
       (await page.getByText('Hollow = deload week').count()) === 1,
     )
 
+    await checkFits(page, 'history')
     await page.screenshot({ path: resolve(OUT_DIR, 'history-charts.png'), fullPage: false })
     await page.mouse.wheel(0, 500)
     await page.waitForTimeout(300)

@@ -67,7 +67,7 @@ export function HistoryScreen() {
               is load-bearing: as a scroll container inside the screen's flex
               column its min-height is zero, so without it the row absorbs all
               the shrink when the charts overflow and collapses to its padding. */}
-          <div className="-mx-6 mt-6 flex shrink-0 gap-2 overflow-x-auto px-6 pb-2">
+          <div className="-mx-6 mt-4 flex shrink-0 gap-2 overflow-x-auto px-6 pb-2">
             {view.exercises.map((exercise) => (
               <button
                 key={exercise.id}
@@ -234,7 +234,7 @@ function HistoryLine({
 }) {
   const unit = 'lb'
   return (
-    <ResponsiveContainer width="100%" height={128}>
+    <ResponsiveContainer width="100%" height={118}>
       <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
         <CartesianGrid vertical={false} stroke={colors.border} />
         <XAxis
@@ -273,7 +273,7 @@ function HistoryLine({
 
 function SetsBars({ points }: { points: HistoryPoint[] }) {
   return (
-    <ResponsiveContainer width="100%" height={116}>
+    <ResponsiveContainer width="100%" height={106}>
       <BarChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
         <CartesianGrid vertical={false} stroke={colors.border} />
         <XAxis

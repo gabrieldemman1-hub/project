@@ -133,6 +133,7 @@ async function main(): Promise<void> {
 
     console.log('\nBACKUP — exported offline, and it holds the data')
     await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByText('Backup', { exact: true }).click()
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export backup' }).click()
     const download = await downloadPromise
@@ -150,7 +151,7 @@ async function main(): Promise<void> {
     )
     check(
       'the export is recorded, so the 30-day nudge resets',
-      (await page.getByText('Last backup: Wednesday 19 August').count()) === 1,
+      (await page.getByText('Last backup: Wednesday 19 August').count()) >= 1,
     )
 
     console.log('\nRESTORE — a wiped phone gets its history back from the file')
@@ -178,6 +179,7 @@ async function main(): Promise<void> {
     )
 
     await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByText('Backup', { exact: true }).click()
     await page
       .getByLabel('Choose a backup file to restore')
       .setInputFiles(backupPath)
@@ -195,6 +197,7 @@ async function main(): Promise<void> {
     const junkPath = resolve(SCRATCH, 'junk.json')
     writeFileSync(junkPath, JSON.stringify({ some: 'other json' }), 'utf8')
     await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByText('Backup', { exact: true }).click()
     await page.getByLabel('Choose a backup file to restore').setInputFiles(junkPath)
     await page.getByText('not a workout backup').waitFor()
     check('a non-backup JSON file is refused with a plain-English error', true)

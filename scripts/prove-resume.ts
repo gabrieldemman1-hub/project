@@ -53,6 +53,16 @@ async function typeIntoStepper(page: Page, label: string, value: string) {
   await input.press('Enter')
 }
 
+/** Fails if the shell's scroll region overflows — every screen must fit. */
+async function checkFits(page: Page, label: string) {
+  const overflow = await page.evaluate(() => {
+    const main = document.querySelector('main')
+    return main ? Math.max(0, main.scrollHeight - main.clientHeight) : 0
+  })
+  check(`${label} fits without scrolling`, overflow <= 1,
+    overflow > 1 ? `${overflow}px past the fold` : undefined)
+}
+
 async function shot(page: Page, name: string) {
   await page.screenshot({ path: resolve(OUT_DIR, `${name}.png`) })
 }
@@ -160,6 +170,7 @@ async function main(): Promise<void> {
         (await page.getByRole('button', { name: 'Log set 1 of 3' }).count()) === 0,
     )
     await shot(page, 'session-recommendation')
+    await checkFits(page, 'the exercise screen')
 
     console.log('\nSESSION — log sets, then kill the tab without warning')
     await typeIntoStepper(page, 'Weight', '185')
@@ -218,9 +229,11 @@ async function main(): Promise<void> {
       'resumes on exercise 2 — no re-asking the soreness questions',
       (await revived.getByText('Exercise 2 of 5').count()) === 1,
     )
+    // Read off the pill's accessible name: the numbers now live on separate
+    // lines inside a compact pill, and the label is the durable contract.
     check(
       'exercise 2’s set survived: 200 × 8',
-      (await revived.getByText('200 × 8').count()) === 1,
+      (await revived.getByRole('button', { name: 'Edit set 1: 200 × 8' }).count()) === 1,
     )
     check(
       'set numbering continues: "Log set 2 of 3"',
@@ -231,8 +244,8 @@ async function main(): Promise<void> {
     await revived.getByText('Exercise 1 of 5').waitFor()
     check(
       'exercise 1’s sets survived: 185 × 8 and 185 × 7',
-      (await revived.getByText('185 × 8').count()) === 1 &&
-        (await revived.getByText('185 × 7').count()) === 1,
+      (await revived.getByRole('button', { name: 'Edit set 1: 185 × 8' }).count()) === 1 &&
+        (await revived.getByRole('button', { name: 'Edit set 2: 185 × 7' }).count()) === 1,
     )
     await shot(revived, 'resume-after-kill')
 
@@ -312,6 +325,7 @@ async function main(): Promise<void> {
       (await revived.getByRole('button', { name: /^Duration: 45 min/ }).count()) === 1,
     )
     await shot(revived, 'session-cardio')
+    await checkFits(revived, 'the cardio screen')
 
     await revived.getByRole('button', { name: 'Finish session' }).click()
     await revived.getByText('Session complete').waitFor()

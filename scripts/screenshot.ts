@@ -267,8 +267,19 @@ async function audit(page: Page, insets: Device['insets']) {
       !scrollerBox ||
       lastRow.getBoundingClientRect().bottom <= scrollerBox.bottom + 1
 
+    /*
+     * The screen must fit, not scroll (owner request). Measured on the shell's
+     * own scroll region: the day plan's exercise list is allowed to scroll
+     * *inside itself*, which does not add to this number, so one rule covers
+     * both "nothing scrolls" and "only the list scrolls".
+     */
+    const contentOverflowPx = scroller
+      ? Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      : 0
+
     return {
       action,
+      contentOverflowPx,
       lowContrast,
       listFullyVisible,
       safeArea: { underNotch, underHomeIndicator },
@@ -350,6 +361,9 @@ async function main(): Promise<void> {
     // I doing today" and must never need a scroll to finish reading.
     if (options?.requireFullList && !result.listFullyVisible)
       problems.push('exercise list runs past the fold')
+    // Tolerate a pixel of rounding; anything more is a screen that scrolls.
+    if (result.contentOverflowPx > 1)
+      problems.push(`screen scrolls — ${result.contentOverflowPx}px past the fold`)
     if (result.documentScrollsHorizontally) problems.push('horizontal overflow')
     if (result.documentScrollsVertically) problems.push('page scrolls')
     if (result.action.present && !result.action.withinViewport)
@@ -430,6 +444,13 @@ async function main(): Promise<void> {
           result.safeArea.underNotch === 0 && result.safeArea.underHomeIndicator === 0
             ? 'yes'
             : `NO — ${result.safeArea.underNotch} under notch, ${result.safeArea.underHomeIndicator} under home indicator`
+        }`,
+      )
+      console.log(
+        `  fits without scrolling ${
+          result.contentOverflowPx > 1
+            ? `NO — ${result.contentOverflowPx}px past the fold`
+            : 'yes'
         }`,
       )
       console.log(

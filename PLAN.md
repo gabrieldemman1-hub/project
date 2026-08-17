@@ -466,6 +466,24 @@ scripts/prove-settings.ts        theme screenshots wait for the crossfade
 screenshots/before/              the full pre-polish set, for comparison
 ```
 
+**Tap, don't scroll (owner request):**
+```
+src/components/Screen.tsx        reclaimed padding; documents the fit rule
+src/components/Button.tsx        press-scale removed
+src/components/Stepper.tsx       (unchanged this round)
+scripts/screenshot.ts            + contentOverflowPx, enforced on every screen
+src/features/home/HomeScreen.tsx swipe removed; the list is its own scroller;
+                                 duplicate footer dropped for a version stamp
+src/features/session/SessionScreen.tsx  swipe removed; set rows → set pills;
+                                 meta line trimmed
+src/features/dashboard/DashboardScreen.tsx  compacted to fit an iPhone SE;
+                                 saved blocks → one row into Settings
+src/features/settings/SettingsScreen.tsx  all sections folded, each summarised
+src/features/history/HistoryScreen.tsx  chart heights trimmed to fit
+scripts/prove-resume.ts · prove-settings.ts · prove-offline.ts ·
+scripts/shoot-history.ts         fit checks added; selectors follow the new UI
+```
+
 **Design review (owner request):**
 ```
 src/styles/tokens.ts             textMuted/textSecondary/alert raised to the
@@ -549,6 +567,60 @@ joint-pain flag moved to a deeper, duller red and those flags always carry a
 word as well as a colour. The light theme carries the same identity one step
 deeper for contrast on white. Recorded here rather than silently contradicting
 the brief.
+
+### Interlude: tap, don't scroll (owner request, from real use)
+
+> "I don't like how I have to scroll for things or like stuff moves when I
+> touch my finger. I mainly want things I just tap and everything shows at
+> once. The only thing I don't mind scrolling is the list of exercises."
+
+Two rules, and they are now enforced rather than intended.
+
+**Nothing moves under a finger.**
+
+- **Swipe-to-change-day** (home) and **swipe-to-change-exercise** (session) are
+  gone. A horizontal swipe and a vertical scroll are the same gesture until the
+  finger has already travelled, so a thumb resting on the screen could change
+  the day you were reading or move you off the exercise you were logging.
+  Every navigation is now a deliberate tap on a named control.
+- **Press-scale is gone** from buttons and the dashboard card. A control that
+  shrinks under the thumb is literally the complaint. Press feedback is colour.
+
+**Everything fits; only the exercise list scrolls.**
+
+- **The audit enforces it.** `scripts/screenshot.ts` measures the shell's own
+  scroll region and fails any screen whose content overflows. The exercise
+  list owns its *own* internal scroller, so it does not count against that
+  number — one rule covers both "nothing scrolls" and "only the list scrolls".
+  The session, cardio, settings and history screens are outside the sweep's
+  reach, so the same check now runs inside `prove-resume`, `prove-settings`
+  and `shoot-history`.
+- **The shell gave back 40px:** the top padding was `safe-top + 48px` of dead
+  band (now `+ 24`), and the action bar reserved 40px *on top of* the
+  safe-area inset that actually clears the home indicator (now 24).
+- **Dashboard, 188px over on an iPhone SE → fits.** Greeting and date share a
+  line; the day letter came down from 80px to 44px; the week's three stat
+  cards became one line of text; "Saved blocks" — the one unbounded list on
+  the front door — became a single row that opens Settings, where the same
+  list already lived; the "ready" state drops its redundant status line.
+- **Session screen, ~160px over → fits with room.** The day's sets were five
+  full-width rows costing ~250px; they are now one row of pills at ~50px,
+  each showing the set number and either what you logged (bright) or last
+  session's number to beat (grey). Tapping a logged pill still loads it for
+  correction. The meta line lost the set count (the pills show it) and the
+  rest time (the timer shows it).
+- **Settings arrives as six labelled rows**, all folded, each saying what it
+  holds — `BACKUP never`, `APP LOCK off`, `EXERCISE LIBRARY 21 movements`. Tap
+  one and it opens in place. It was 559px past the fold.
+- **History** trimmed its chart heights to fit all three plus the deload note.
+- **`/today` dropped its duplicate footer** (streak + History + Settings): the
+  dashboard is one tap away and carries all three pinned. That bought the
+  exercise list ~70px.
+
+Gates: 183 tests, build, six browser proofs (five updated — the set pills,
+the folded sections and the removed selectors all changed what the proofs
+must assert), 16/16 device sweep with both the contrast and the fits-on-screen
+rules live.
 
 ### Interlude: the design review (owner request — ten fixes, all shipped)
 

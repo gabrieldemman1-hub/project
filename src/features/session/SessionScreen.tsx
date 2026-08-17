@@ -37,9 +37,10 @@ interface RestState {
 }
 
 /**
- * The session flow (BRIEF Part 6): one exercise at a time, swipe or tap to
- * move, steppers for weight and reps, a rest timer that starts itself when a
- * set is logged, and cardio as the final step before completion.
+ * The session flow (BRIEF Part 6): one exercise at a time, tapped through with
+ * the arrows beside the primary action, steppers for weight and reps, a rest
+ * timer that starts itself when a set is logged, and cardio as the final step
+ * before completion.
  *
  * Everything rendered as "logged" comes from a live query over IndexedDB —
  * there is no optimistic set state anywhere, so what the screen shows saved
@@ -141,21 +142,12 @@ function SessionBody({
     void setSessionPosition(session.id, target)
   }
 
-  // Swipe between exercises; tap targets exist too, so this is an extra, not
-  // the only path.
-  const touchStartX = useRef<number | null>(null)
-  function onTouchStart(event: React.TouchEvent) {
-    touchStartX.current = event.touches[0]?.clientX ?? null
-  }
-  function onTouchEnd(event: React.TouchEvent) {
-    const start = touchStartX.current
-    touchStartX.current = null
-    const end = event.changedTouches[0]?.clientX
-    if (start === null || end === undefined) return
-    const delta = end - start
-    if (Math.abs(delta) < 60) return
-    go(delta < 0 ? clamped + 1 : clamped - 1)
-  }
+  /*
+   * Swipe-between-exercises is gone (owner request): mid-set, a thumb resting
+   * on the screen could move you off the exercise you were logging. The
+   * arrows beside the primary action are the only way through, and they are
+   * deliberate taps.
+   */
 
   // The day's soreness questions come before any lifting (BRIEF Part 5).
   const firstUnanswered = unansweredSoreness[0]
@@ -242,8 +234,6 @@ function SessionBody({
       onPrev={clamped > 0 ? () => go(clamped - 1) : null}
       onNext={() => go(clamped + 1)}
       isLast={clamped === exercises.length - 1}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
     />
   )
 }
@@ -262,8 +252,6 @@ function ExercisePane({
   onPrev,
   onNext,
   isLast,
-  onTouchStart,
-  onTouchEnd,
 }: {
   exercise: ExerciseView
   prescription: Prescription | undefined
@@ -278,8 +266,6 @@ function ExercisePane({
   onPrev: (() => void) | null
   onNext: () => void
   isLast: boolean
-  onTouchStart: (event: React.TouchEvent) => void
-  onTouchEnd: (event: React.TouchEvent) => void
 }) {
   const nextSetIndex = sets.length
   const lastLogged = sets[sets.length - 1]
@@ -455,7 +441,7 @@ function ExercisePane({
         </div>
       }
     >
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="flex min-h-full flex-col">
+      <div className="flex min-h-full flex-col">
         <header className="flex items-center justify-between gap-4">
           <p className="text-xs tracking-wider text-text-secondary uppercase">
             Exercise <span className="num text-text">{position + 1}</span> of{' '}
@@ -518,30 +504,36 @@ function ExercisePane({
           </>
         ) : null}
 
-        <h1 className="mt-6 text-xl leading-snug text-balance text-text">
+        <h1 className="mt-4 text-lg leading-snug text-balance text-text">
           {exercise.name}
         </h1>
-        <p className="mt-2 text-xs tracking-wider text-text-secondary uppercase">
-          {prescription ? (
-            <>
-              <span className="num">{prescription.plannedSets}</span> sets
-              <span className="mx-2 text-text-faint">·</span>
-            </>
-          ) : null}
-          {exercise.repTargetMin}–{exercise.repTargetMax} reps
-          <span className="mx-2 text-text-faint">·</span>
-          <span className="num">{exercise.restSeconds}s</span> rest
+        {/* Set count is visible from the pills below and rest time from the
+            timer itself, so the meta line is down to the rep target. */}
+        <p className="mt-1 text-xs tracking-wider text-text-secondary uppercase">
+          <span className="num">
+            {exercise.repTargetMin}–{exercise.repTargetMax}
+          </span>{' '}
+          reps
         </p>
 
         {/* The engine explains itself in one sentence (BRIEF Part 5). */}
         {prescription ? (
-          <div className="mt-5 rounded-md border border-border bg-surface px-4 py-3">
-            <p className="text-sm leading-relaxed text-text">{prescription.sentence}</p>
+          <div className="mt-4 rounded-md border border-border bg-surface px-4 py-2">
+            <p className="text-sm leading-snug text-text">{prescription.sentence}</p>
           </div>
         ) : null}
 
+        {/*
+         * The day's sets as one row of pills rather than a stacked list. Five
+         * full-width rows cost ~250px and pushed the steppers and the action
+         * button off the screen; this is ~50px and shows the whole exercise at
+         * a glance, which is what the owner asked for. A logged pill reads
+         * bright; one still to come shows last session's number to beat in
+         * grey. Tapping a logged pill loads it for correction, exactly as the
+         * rows did.
+         */}
         {sets.length > 0 || previous.length > 0 || prescription ? (
-          <ul className="mt-8 flex flex-col gap-2">
+          <ul className="mt-5 flex gap-2">
             {Array.from(
               {
                 length: Math.max(
@@ -554,49 +546,61 @@ function ExercisePane({
                 const logged = sets[setIndex]
                 const target = previous[setIndex]
                 const isEditing = editing?.index === setIndex
-                const row = (
+                const shown = logged ?? target
+                const pill = (
                   <>
-                    <span className="num w-5 shrink-0 text-sm text-text-muted">
+                    <span className="num block text-micro text-text-muted">
                       {setIndex + 1}
                     </span>
-                    {/* Last session, greyed: the target to beat. A number you
-                        read, so it sits on the readable grey; the placeholder
-                        dash for a first-ever exercise carries no information
-                        and stays decoration. */}
-                    {target ? (
-                      <span className="num w-20 shrink-0 text-left text-sm text-text-muted">
-                        {target.weightLb} × {target.reps}
-                      </span>
+                    {shown ? (
+                      <>
+                        <span
+                          className={`num block text-sm leading-tight ${
+                            logged ? 'text-text' : 'text-text-muted'
+                          }`}
+                        >
+                          {shown.weightLb}
+                        </span>
+                        <span
+                          className={`num block text-micro leading-tight ${
+                            logged ? 'text-text-secondary' : 'text-text-muted'
+                          }`}
+                        >
+                          ×{shown.reps}
+                        </span>
+                      </>
                     ) : (
-                      <span className="num w-20 shrink-0 text-left text-sm text-text-faint">
+                      <span className="num block text-sm leading-tight text-text-faint">
                         —
                       </span>
                     )}
-                    <span className="num flex-1 text-right text-base text-text">
-                      {logged ? `${logged.weightLb} × ${logged.reps}` : ''}
-                    </span>
                   </>
                 )
                 return (
-                  <li key={setIndex}>
+                  <li key={setIndex} className="min-w-0 flex-1">
                     {logged ? (
-                      // A logged set is tappable: it loads into the steppers
-                      // for correction. Tapping again cancels.
                       <button
                         type="button"
                         aria-label={`Edit set ${setIndex + 1}: ${logged.weightLb} × ${logged.reps}`}
                         onClick={() => beginOrToggleEdit(setIndex, logged)}
-                        className={`flex min-h-touch-min w-full items-center gap-4 rounded-md border px-4 ${
+                        className={`min-h-touch-min w-full rounded-md border px-1 py-1.5 ${
                           isEditing
                             ? 'border-border-strong bg-surface-raised'
                             : 'border-border bg-surface'
                         }`}
                       >
-                        {row}
+                        {pill}
                       </button>
                     ) : (
-                      <div className="flex min-h-touch-min items-center gap-4 rounded-md border border-border bg-surface px-4">
-                        {row}
+                      <div
+                        aria-label={
+                          target
+                            ? `Set ${setIndex + 1} to come, last time ${target.weightLb} × ${target.reps}`
+                            : `Set ${setIndex + 1} to come`
+                        }
+                        className="min-h-touch-min rounded-md border border-border bg-surface px-1 py-1.5"
+                      >
+                        {pill}
                       </div>
                     )}
                   </li>
@@ -607,14 +611,14 @@ function ExercisePane({
         ) : null}
 
         {editing ? (
-          <p className="mt-4 text-xs tracking-wider text-text-secondary uppercase">
+          <p className="mt-3 text-xs tracking-wider text-text-secondary uppercase">
             Editing set <span className="num text-text">{editing.index + 1}</span>
             <span className="mx-2 text-text-faint">·</span>
-            tap the row again to cancel
+            tap it again to cancel
           </p>
         ) : null}
 
-        <div className="mt-8 flex flex-col gap-5">
+        <div className="mt-5 flex flex-col gap-4">
           <div>
             <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
               Weight

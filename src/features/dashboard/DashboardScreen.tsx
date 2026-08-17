@@ -10,7 +10,7 @@ import {
   type WeekDayStatus,
   type WeekTotals,
 } from '../../db/queries'
-import { formatLongDate, fromIsoDate } from '../../lib/date'
+import { formatLongDate } from '../../lib/date'
 import { navigate } from '../../lib/router'
 import { useToday } from '../../lib/useToday'
 
@@ -74,19 +74,21 @@ export function DashboardScreen() {
         </div>
       }
     >
-      <header>
+      {/* Greeting and date on one line: two stacked lines of chrome is a
+          luxury a screen that must fit cannot afford. */}
+      <header className="flex flex-wrap items-baseline gap-x-3">
+        <h1 className="text-xl leading-snug text-text">
+          {formatLongDate(view.date)}
+        </h1>
         <p className="text-xs tracking-wider text-text-secondary uppercase">
           {greeting()}
         </p>
-        <h1 className="mt-2 text-2xl leading-snug text-text">
-          {formatLongDate(view.date)}
-        </h1>
       </header>
 
       {activeBlock ? (
         <BlockCard block={activeBlock} view={view} />
       ) : (
-        <p className="mt-8 text-sm text-text-secondary">Setting up your program…</p>
+        <p className="mt-5 text-sm text-text-secondary">Setting up your program…</p>
       )}
 
       <WeekBoard week={view.week} totals={view.weekTotals} />
@@ -99,28 +101,22 @@ export function DashboardScreen() {
         <BackupNudge days={view.backupOverdueDays} />
       ) : null}
 
+      {/* "Saved blocks" used to list every finished mesocycle here. It is the
+          same list Settings › Blocks already shows, and it was the one thing
+          on this screen that grew without bound — the reason the front door
+          scrolled after a few blocks. One line, and the detail is a tap away. */}
       {view.savedBlocks.length > 0 ? (
-        <section className="mt-8">
-          <h2 className="text-xs tracking-wider text-text-secondary uppercase">
-            Saved blocks
-          </h2>
-          <ul className="mt-3 flex flex-col gap-2">
-            {view.savedBlocks.map((block) => (
-              <li
-                key={block.id}
-                className="flex items-baseline justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3"
-              >
-                <span className="text-sm text-text-secondary">
-                  {monthAndYear(block.startDate)}
-                </span>
-                <span className="shrink-0 text-xs text-text-muted">
-                  <span className="num">{block.sessionCount}</span>{' '}
-                  {block.sessionCount === 1 ? 'session' : 'sessions'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <button
+          type="button"
+          onClick={() => navigate('/settings')}
+          className="mt-5 flex min-h-touch-min w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 text-left"
+        >
+          <span className="text-sm text-text-secondary">
+            <span className="num text-text">{view.savedBlocks.length}</span>{' '}
+            {view.savedBlocks.length === 1 ? 'finished block' : 'finished blocks'}
+          </span>
+          <span className="shrink-0 text-xs text-text-secondary">View ›</span>
+        </button>
       ) : null}
     </Screen>
   )
@@ -143,8 +139,7 @@ function BlockCard({
       type="button"
       aria-label="Open today’s workout"
       onClick={() => navigate('/today')}
-      className="mt-8 w-full rounded-xl border border-accent-border bg-surface px-5 py-5 text-left shadow-soft active:scale-[0.995]"
-      style={{ transitionDuration: 'var(--duration-fast)' }}
+      className="mt-5 w-full rounded-xl border border-accent-border bg-surface px-5 py-4 text-left shadow-soft"
     >
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs tracking-wider text-text-secondary uppercase">
@@ -168,36 +163,43 @@ function BlockCard({
 
       {rest ? (
         <>
-          <p className="mt-4 text-2xl text-text">Rest day</p>
+          <p className="mt-3 text-xl text-text">Rest day</p>
           {view.nextDayLetter ? (
-            <p className="mt-2 text-sm text-text-secondary">
+            <p className="mt-1 text-sm text-text-secondary">
               Next: Day {view.nextDayLetter} — {view.nextDayName}
             </p>
           ) : null}
         </>
       ) : (
         <>
-          <div className="mt-4 flex items-baseline gap-5">
-            <span className="num text-5xl font-bold text-accent">
+          {/* The day letter came down from 80px to 44px: still unmistakably
+              the loudest thing on the card, and it gave the week board and
+              the block strip the room they needed to sit above the fold. */}
+          <div className="mt-3 flex items-baseline gap-4">
+            <span className="num text-3xl font-bold text-accent">
               {view.dayLetter}
             </span>
             <span className="text-lg text-balance text-text">{view.dayName}</span>
           </div>
-          <p className="mt-2 text-sm text-text-secondary">
+          <p className="mt-1 text-sm text-text-secondary">
             <span className="num">{view.exerciseCount}</span> exercises
           </p>
         </>
       )}
 
-      <p className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-sm">
+      <p className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
         <span className="font-medium text-accent">
           {callToAction(view.state, view.dayLetter)}
         </span>
         <span className="shrink-0 text-accent">›</span>
       </p>
-      <p className="mt-1 text-micro tracking-wider text-text-muted uppercase">
-        {statusLine(view.state, view.setsLoggedToday)}
-      </p>
+      {/* The status line is dropped for the plain "ready" state, where the
+          call to action already says everything there is to say. */}
+      {view.state === 'ready' ? null : (
+        <p className="mt-1 text-xs text-text-muted">
+          {statusLine(view.state, view.setsLoggedToday)}
+        </p>
+      )}
     </button>
   )
 }
@@ -213,14 +215,14 @@ function BlockCard({
  */
 function WeekBoard({ week, totals }: { week: WeekDay[]; totals: WeekTotals }) {
   return (
-    <section className="mt-8">
+    <section className="mt-5">
       <h2 className="text-xs tracking-wider text-text-secondary uppercase">
         This week
       </h2>
 
       {/* One divided strip, not seven gapped chips: at 375px a gap of even
           4px would squeeze each column under the 44px touch floor. */}
-      <ul className="mt-3 grid grid-cols-7 divide-x divide-border overflow-hidden rounded-md border border-border bg-surface">
+      <ul className="mt-2 grid grid-cols-7 divide-x divide-border overflow-hidden rounded-md border border-border bg-surface">
         {week.map((day) => (
           <li key={day.date} className="flex">
             <DayChip day={day} />
@@ -233,18 +235,34 @@ function WeekBoard({ week, totals }: { week: WeekDay[]; totals: WeekTotals }) {
           "small text, generously spaced" into static. Section headings stay
           uppercase — they carry the structure — and everything that is merely
           a caption speaks quietly. */}
-      <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
+      <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
         <Key className="bg-accent" label="Done" />
         <Key className="bg-text-muted" label="Skipped" />
         <Key className="bg-alert" label="Missed" />
         <Key className="bg-text" label="Today" />
       </p>
 
-      <div className="mt-5 grid grid-cols-3 gap-2">
-        <Stat value={String(totals.sessions)} label="Sessions" />
-        <Stat value={String(totals.sets)} label="Sets" />
-        <Stat value={totals.volumeLb.toLocaleString('en-GB')} label="Lb moved" />
-      </div>
+      {/* The week's numbers as one line rather than three cards. Three boxed
+          stats cost ~70px of a screen that has to fit; the numbers still lead
+          each pair and still sit in the numeric face. */}
+      <p className="mt-2 flex flex-wrap gap-x-3 text-sm text-text-secondary">
+        <span>
+          <span className="num text-text">{totals.sessions}</span>{' '}
+          {totals.sessions === 1 ? 'session' : 'sessions'}
+        </span>
+        <span className="text-text-faint">·</span>
+        <span>
+          <span className="num text-text">{totals.sets}</span>{' '}
+          {totals.sets === 1 ? 'set' : 'sets'}
+        </span>
+        <span className="text-text-faint">·</span>
+        <span>
+          <span className="num text-text">
+            {totals.volumeLb.toLocaleString('en-GB')}
+          </span>{' '}
+          lb
+        </span>
+      </p>
     </section>
   )
 }
@@ -258,15 +276,6 @@ function Key({ className, label }: { className: string; label: string }) {
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="rounded-md border border-border bg-surface px-3 py-3">
-      <p className="num text-xl leading-tight text-text">{value}</p>
-      <p className="mt-1 text-xs text-text-muted">{label}</p>
-    </div>
-  )
-}
-
 function DayChip({ day }: { day: WeekDay }) {
   const style = chipStyle(day.status, day.isToday)
   return (
@@ -274,11 +283,13 @@ function DayChip({ day }: { day: WeekDay }) {
       type="button"
       aria-label={dayChipLabel(day)}
       onClick={() => navigate('/today', { day: day.date })}
-      className={`min-h-touch-comfortable w-full px-1 pt-2 pb-3 ${style.chip}`}
+      className={`min-h-touch-min w-full px-1 py-2 ${style.chip}`}
     >
       <span className={`mx-auto block h-1 w-3 rounded-full ${style.bar}`} />
-      <span className="mt-2 block text-micro text-text-muted">{day.weekdayShort}</span>
-      <span className={`num mt-1 block text-lg leading-tight font-bold ${style.letter}`}>
+      <span className="mt-1.5 block text-micro text-text-muted">
+        {day.weekdayShort}
+      </span>
+      <span className={`num block text-base leading-snug font-bold ${style.letter}`}>
         {day.letter ?? '·'}
       </span>
     </button>
@@ -349,14 +360,14 @@ function dayChipLabel(day: WeekDay): string {
  */
 function BlockStrip({ weeks }: { weeks: DashboardView['blockWeeks'] }) {
   return (
-    <section className="mt-8">
+    <section className="mt-5">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-xs tracking-wider text-text-secondary uppercase">
           Block progress
         </h2>
         <p className="shrink-0 text-xs text-text-muted">D = deload</p>
       </div>
-      <ul className="mt-3 flex gap-1">
+      <ul className="mt-2 flex gap-1">
         {weeks.map((week) => (
           <li key={week.week} className="flex-1">
             <span
@@ -455,7 +466,3 @@ function greeting(now: Date = new Date()): string {
   return 'Good evening'
 }
 
-function monthAndYear(iso: string): string {
-  const date = fromIsoDate(iso)
-  return `${date.toLocaleDateString('en-GB', { month: 'long' })} ${date.getFullYear()}`
-}
