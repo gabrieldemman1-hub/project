@@ -392,6 +392,17 @@ screenshots/feedback-*.png · session-recommendation.png
   answer. Standing offer: say the word to switch any day to the full per-muscle
   list — it is data, not code.
 
+### Interlude: day browsing (product owner request, post-Phase 4)
+
+The home screen now steps through the calendar — chevrons or a horizontal
+swipe, both directions, any distance — with "Back to today" in the action
+bar. Browsing is strictly read-only: Start, Resume and Skip exist only on
+the real today, so looking at Thursday can never create Thursday's session
+early. Past days show their verdict (completed with set count and cardio,
+skipped, unfinished, or not trained); the week indicator follows the viewed
+date. Verified in the browser proof: forward to Day B, back to the rest day,
+and home again, with the Start button only ever on today.
+
 ### Phase 3+4 review, and what it changed
 
 The independent review recomputed the whole engine against the brief —

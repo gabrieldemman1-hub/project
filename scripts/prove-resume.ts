@@ -91,8 +91,38 @@ async function main(): Promise<void> {
   }
 
   try {
-    console.log('\nCHECK-IN — the soreness questions come before any lifting')
+    console.log('\nBROWSING — any day is reachable, back and forwards, read-only')
     const page = await openApp()
+
+    // Frozen on Monday: one step forward is Tuesday, Day B.
+    await page.getByRole('button', { name: 'Next day' }).click()
+    await page.getByText('Legs').waitFor()
+    check(
+      'forward to Tuesday shows Day B with no Start button',
+      (await page.getByText('Tuesday 18 August').count()) === 1 &&
+        (await page.getByRole('button', { name: 'Start session' }).count()) === 0,
+    )
+    check(
+      'a browsed day offers Back to today instead',
+      (await page.getByRole('button', { name: 'Back to today' }).count()) >= 1,
+    )
+    await shot(page, 'home-browse-forward')
+
+    // Back two steps lands on Sunday — the rest day.
+    await page.getByRole('button', { name: 'Previous day' }).click()
+    await page.getByRole('button', { name: 'Previous day' }).click()
+    await page.getByText('Rest day').waitFor()
+    check(
+      'backwards reaches Sunday’s rest day',
+      (await page.getByText('Sunday 16 August').count()) === 1,
+    )
+
+    await page.getByRole('button', { name: 'Back to today' }).first().click()
+    await page.getByText(/· Today/).waitFor()
+    await page.getByRole('button', { name: 'Start session' }).waitFor()
+    check('Back to today restores the live day with its Start button', true)
+
+    console.log('\nCHECK-IN — the soreness questions come before any lifting')
     await page.getByRole('button', { name: 'Start session' }).click()
 
     await page.getByText('How sore is your chest').waitFor()
