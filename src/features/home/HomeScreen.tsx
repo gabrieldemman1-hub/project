@@ -5,7 +5,12 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Screen } from '../../components/Screen'
 import { getTodayView, type TodayView } from '../../db/queries'
-import { skipToday, startSession, undoSkip } from '../../db/mutations'
+import {
+  skipToday,
+  startNewMesocycle,
+  startSession,
+  undoSkip,
+} from '../../db/mutations'
 import { WEEKDAY_NAMES, addDays, formatLongDate, weekdayOf } from '../../lib/date'
 import { navigate } from '../../lib/router'
 import { useToday } from '../../lib/useToday'
@@ -65,6 +70,31 @@ interface DayNavState {
   offset: number
   isToday: boolean
   setOffset: (offset: number) => void
+}
+
+/**
+ * The end of a six-week block waits for a deliberate tap (decision A-4): the
+ * app never rolls into a new mesocycle on its own. Training is paused until
+ * the new block is started.
+ */
+function StartNewBlock() {
+  const [starting, setStarting] = useState(false)
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-center text-xs tracking-wider text-text-secondary uppercase">
+        Six weeks done — deload finished
+      </p>
+      <Button
+        disabled={starting}
+        onClick={() => {
+          setStarting(true)
+          void startNewMesocycle().finally(() => setStarting(false))
+        }}
+      >
+        Start new block
+      </Button>
+    </div>
+  )
 }
 
 function DayNav({ nav }: { nav: DayNavState }) {
@@ -169,6 +199,8 @@ function TrainingDay({
           <Button variant="quiet" onClick={() => nav.setOffset(0)}>
             Back to today
           </Button>
+        ) : position?.isComplete && !session ? (
+          <StartNewBlock />
         ) : completed ? (
           <p className="text-center text-xs tracking-wider text-text-secondary uppercase">
             Session complete
@@ -277,6 +309,8 @@ function RestDay({ view, nav }: { view: TodayView; nav: DayNavState }) {
           <Button variant="quiet" onClick={() => nav.setOffset(0)}>
             Back to today
           </Button>
+        ) : view.position?.isComplete ? (
+          <StartNewBlock />
         ) : unfinishedSession ? (
           <Button onClick={() => navigate('/session')}>
             Finish previous session

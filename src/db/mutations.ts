@@ -20,7 +20,9 @@ import type {
   Soreness,
 } from './schema'
 import { newId } from '../lib/ids'
+import { toIsoDate, upcomingTrainingWeekStart } from '../lib/date'
 import { mesocyclePosition, templateForDate } from '../lib/schedule'
+import { MESOCYCLE_DELOAD_WEEK, MESOCYCLE_TOTAL_WEEKS } from './seed'
 import { recommend } from '../engine/recommend'
 import type { ExerciseHistoryInput } from '../engine/types'
 
@@ -193,6 +195,38 @@ export async function completeSession(
   })
 }
 
+/**
+ * Starts the next six-week block (decision A-4: always by hand, never
+ * automatic). The old block is marked completed and the new one anchors to
+ * the current training week — tapping it on a Sunday starts the block at the
+ * Monday about to begin.
+ */
+export async function startNewMesocycle(now: Date = new Date()): Promise<void> {
+  const timestamp = now.getTime()
+
+  await db.transaction('rw', [db.mesocycles, db.settings], async () => {
+    const settings = await db.settings.get('app')
+    if (!settings) throw new Error('Database has not been seeded')
+
+    await db.mesocycles.update(settings.activeMesocycleId, {
+      status: 'completed',
+      updatedAt: timestamp,
+    })
+
+    const id = newId()
+    await db.mesocycles.add({
+      id,
+      startDate: upcomingTrainingWeekStart(toIsoDate(now)),
+      totalWeeks: MESOCYCLE_TOTAL_WEEKS,
+      deloadWeek: MESOCYCLE_DELOAD_WEEK,
+      status: 'active',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    await db.settings.update('app', { activeMesocycleId: id, updatedAt: timestamp })
+  })
+}
+
 /** Records one soreness answer. Re-answering a group overwrites, not duplicates. */
 export async function saveSorenessFeedback(
   sessionId: string,
@@ -320,14 +354,18 @@ export async function generatePrescriptions(
         const exercise = await db.exercises.get(exerciseId)
         if (!exercise) continue
 
-        // Last time this exercise was performed in a completed session, with
+        // Last time this exercise was *worked* in a completed session, with
         // the feedback given that day and what the engine did to the load.
-        // (Inlined rather than shared with queries.ts because everything here
-        // must read inside this transaction.)
+        // Deload sessions are invisible here (BRIEF Part 5): the week after a
+        // deload starts from the deload week's pre-deload set counts at the
+        // last working weight, and the second deload day of week six halves
+        // from week five, not from the first deload day. (Inlined rather than
+        // shared with queries.ts because everything here must read inside
+        // this transaction.)
         const completed = (
           await db.sessions.where('status').equals('completed').toArray()
         )
-          .filter((s) => s.id !== sessionId)
+          .filter((s) => s.id !== sessionId && !s.isDeload)
           .sort((a, b) => b.date.localeCompare(a.date))
 
         let last: ExerciseHistoryInput['last'] = null
@@ -353,7 +391,14 @@ export async function generatePrescriptions(
             pump: feedback?.pump ?? null,
             rir: feedback?.rir ?? null,
             jointPain: feedback?.jointPain ?? null,
-            loadAction: prescription?.loadAction ?? null,
+            // The never-increase-twice guard resets at a block boundary
+            // (PLAN §2.5: a deload isn't an increase, so week one of a new
+            // block may add load). History from an earlier mesocycle carries
+            // its sets and feedback forward, but not its guard state.
+            loadAction:
+              candidate.mesocycleId === session.mesocycleId
+                ? (prescription?.loadAction ?? null)
+                : null,
           }
           break
         }

@@ -136,8 +136,10 @@ export async function getPreviousExerciseHistory(
     .equals('completed')
     .toArray()
 
+  // Deload sessions are never a benchmark: the numbers to beat are the last
+  // real working numbers, matching what the engine itself progresses from.
   const candidates = completed
-    .filter((session) => session.id !== excludeSessionId)
+    .filter((session) => session.id !== excludeSessionId && !session.isDeload)
     .sort((a, b) => b.date.localeCompare(a.date))
 
   for (const session of candidates) {
@@ -240,8 +242,9 @@ async function assembleSessionView(session: Session): Promise<SessionView | null
     ])
   if (!template) return null
 
+  // Deloads excluded: the greyed target to beat is the last *working* session.
   const candidates = completedSessions
-    .filter((s) => s.id !== session.id)
+    .filter((s) => s.id !== session.id && !s.isDeload)
     .sort((a, b) => b.date.localeCompare(a.date))
 
   // Second batch: the reads that needed the template. The per-exercise
