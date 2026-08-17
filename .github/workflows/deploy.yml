@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# Publishes the app after every push, so the phone always has the latest phase.
+# The tests and the production build both have to pass first — a red build
+# never reaches the phone.
+
+on:
+  push:
+    branches: [claude/workout-logger-plan-bwvwms]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; the newest push wins.
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # @playwright/test is only used by the screenshot script, which does not
+      # run here. Skip the browser download to keep the job fast.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+        env:
+          # Must match the repository name — GitHub Pages serves from /<repo>/.
+          VITE_BASE_PATH: /project/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
