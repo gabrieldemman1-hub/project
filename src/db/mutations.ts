@@ -107,6 +107,14 @@ export async function saveSet(input: SaveSetInput, now: Date = new Date()): Prom
   const timestamp = now.getTime()
 
   await db.transaction('rw', [db.sets, db.sessions], async () => {
+    // Sets only ever belong to a live session. A skipped or completed session
+    // accepting writes is how logged work ends up invisible — a stale tab on
+    // the session screen must fail loudly here, not lose data quietly.
+    const session = await db.sessions.get(input.sessionId)
+    if (!session || session.status !== 'in_progress') {
+      throw new Error('Cannot log a set: this session is not in progress')
+    }
+
     const existing = await db.sets
       .where('[sessionId+exerciseId]')
       .equals([input.sessionId, input.exerciseId])
@@ -195,13 +203,20 @@ export async function skipToday(date: IsoDate, now: Date = new Date()): Promise<
 
 /**
  * Removes a skip, restoring the day to simply untrained. Refuses to touch
- * anything that isn't a skip — a session with logged work is never deleted.
+ * anything that isn't a skip, and refuses to delete a session that has sets —
+ * however they got there — because deleting it would orphan logged work.
  */
 export async function undoSkip(date: IsoDate): Promise<void> {
-  await db.transaction('rw', [db.sessions], async () => {
+  await db.transaction('rw', [db.sessions, db.sets], async () => {
     const existing = await db.sessions.where('date').equals(date).first()
-    if (existing?.status === 'skipped') {
-      await db.sessions.delete(existing.id)
-    }
+    if (existing?.status !== 'skipped') return
+
+    const loggedWork = await db.sets
+      .where('sessionId')
+      .equals(existing.id)
+      .count()
+    if (loggedWork > 0) return
+
+    await db.sessions.delete(existing.id)
   })
 }

@@ -29,16 +29,23 @@ export function HomeScreen() {
 }
 
 function TrainingDay({ view }: { view: TodayView }) {
-  const { template, exercises, position, streak, date, session } = view
+  const { template, exercises, position, streak, date, session, unfinishedSession } = view
   const [starting, setStarting] = useState(false)
   if (!template) return null
 
   const completed = session?.status === 'completed'
   const skipped = session?.status === 'skipped'
   const inProgress = session?.status === 'in_progress'
+  // A workout left in progress on an earlier date takes precedence: finishing
+  // it just navigates — starting today's would strand it forever.
+  const resumingOld = !session && unfinishedSession !== undefined
 
   async function start() {
     if (starting) return
+    if (resumingOld) {
+      navigate('/session')
+      return
+    }
     setStarting(true)
     try {
       await startSession(date)
@@ -80,9 +87,13 @@ function TrainingDay({ view }: { view: TodayView }) {
         ) : (
           <>
             <Button onClick={() => void start()} disabled={starting}>
-              {inProgress ? 'Resume session' : 'Start session'}
+              {inProgress
+                ? 'Resume session'
+                : resumingOld
+                  ? 'Finish previous session'
+                  : 'Start session'}
             </Button>
-            {!inProgress ? (
+            {!inProgress && !resumingOld ? (
               <button
                 type="button"
                 onClick={() => void skipToday(date)}
@@ -105,7 +116,7 @@ function TrainingDay({ view }: { view: TodayView }) {
       <p className="mt-3 text-sm text-text-secondary">
         {exercises.length} exercises
         <span className="mx-2 text-text-muted">·</span>
-        45 min incline walk to finish
+        <span className="num">{view.cardioMinutes}</span> min incline walk to finish
       </p>
 
       <ul className="mt-8 flex flex-col gap-3">
@@ -140,10 +151,18 @@ function TrainingDay({ view }: { view: TodayView }) {
 }
 
 function RestDay({ view }: { view: TodayView }) {
-  const { nextTemplate } = view
+  const { nextTemplate, unfinishedSession } = view
 
   return (
-    <Screen>
+    <Screen
+      action={
+        unfinishedSession ? (
+          <Button onClick={() => navigate('/session')}>
+            Finish previous session
+          </Button>
+        ) : undefined
+      }
+    >
       <Header date={view.date} position={view.position} />
 
       {/* Centred in the space rather than stranded at the top — a rest day

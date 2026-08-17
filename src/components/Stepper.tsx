@@ -30,11 +30,19 @@ export function Stepper({
   }, [editing])
 
   function commitDraft() {
-    const parsed = Number(draft.replace(',', '.'))
-    if (Number.isFinite(parsed) && parsed >= min) {
-      // Snap typed values onto the stepper grid so + and − keep landing on
-      // real pin weights afterwards.
-      onChange(Math.round(parsed / step) * step)
+    const trimmed = draft.trim()
+    // An emptied field is a cancelled edit, not zero — Number('') is 0, which
+    // would silently wipe the previous value.
+    if (trimmed !== '') {
+      const parsed = Number(trimmed.replace(',', '.'))
+      if (Number.isFinite(parsed) && parsed >= min) {
+        // The typed value is kept exactly as typed. The keyboard fallback
+        // exists for weights the stepper grid can't reach — 2.5 lb magnet
+        // plates, odd stacks — so snapping it to the increment would record a
+        // weight that was never lifted. The + and − buttons simply step from
+        // whatever was typed.
+        onChange(parsed)
+      }
     }
     setEditing(false)
   }

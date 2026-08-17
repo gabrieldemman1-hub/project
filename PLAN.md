@@ -345,6 +345,42 @@ screenshots/resume-*.png · session-*.png
   to its own date — the new day simply starts fresh. Nothing is lost; the
   half-done session is just never counted as completed.
 
+### Phase 2 review, and what it changed
+
+The independent review confirmed the write-on-log contract, the two-tap
+logging, double-tap safety, timer behaviour, resume correctness and test
+genuineness — and found four things worth fixing, all fixed the same session:
+
+1. **A data-loss path through skipped sessions.** A stale tab on the session
+   screen could log sets into a session that had since been skipped, and
+   "Undo skip" would then delete the session and orphan the work invisibly.
+   Three fixes: `saveSet` now refuses any session that is not in progress,
+   `undoSkip` refuses to delete a session holding sets regardless of how they
+   got there, and the session screen now follows only the *active* session so
+   skipped and completed sessions are unreachable from it entirely.
+2. **Midnight mid-workout ejected the user and stranded the session.** The
+   session screen was keyed to today's date, so at 00:00 it navigated home
+   and the half-done workout became permanently unreachable — never
+   completed, never a greyed target, never in the streak. The screen now
+   follows the in-progress session wherever its date lies, and the home
+   screen offers "Finish previous session" (on rest days too) until a new
+   session is deliberately started.
+3. **The tap-to-type fallback silently rewrote typed weights.** Typing 187
+   with a 5 lb increment recorded 185. Typed values are now stored exactly as
+   typed — the keyboard exists precisely for weights the stepper grid can't
+   reach — and the +/− buttons step from whatever was typed.
+4. **Clearing a stepper field committed 0.** An emptied field is now a
+   cancelled edit, like garbage input already was.
+
+Also tidied from the review: the home screen's "45 min incline walk" copy now
+reads the real last-cardio duration, and the cardio fallback constants come
+from the seed's `DEFAULT_CARDIO` rather than a duplicate literal. Accepted
+as-is: a deliberate second tap landing in the milliseconds before the live
+query refreshes re-saves the same set instead of logging the next one — the
+overwrite semantics absorb it harmlessly — and `getPreviousExerciseSets`
+scans completed sessions linearly, fine at gym scale, worth an index before
+History ships.
+
 ### Phase 1 notes
 
 Three defects were found and fixed during the phase, all by the tests or the

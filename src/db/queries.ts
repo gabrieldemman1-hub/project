@@ -21,6 +21,7 @@ import {
   type MesocyclePosition,
 } from '../lib/schedule'
 import { addDays } from '../lib/date'
+import { DEFAULT_CARDIO } from './seed'
 
 export async function getSettings(): Promise<AppSettings | undefined> {
   return db.settings.get('app')
@@ -100,8 +101,16 @@ export interface TodayView {
   position: MesocyclePosition | null
   /** Today's session, if one has been started, completed or skipped. */
   session: Session | undefined
+  /**
+   * A session from an earlier date still sitting in progress — a workout that
+   * crossed midnight, or an app closed mid-session and not reopened until the
+   * next day. Offered for finishing until a new session is started.
+   */
+  unfinishedSession: Session | undefined
   /** Sets logged in today's session, for the completed-day summary. */
   setsLoggedToday: number
+  /** Last session's cardio duration, which is what today will be pre-filled with. */
+  cardioMinutes: number
   streak: number
 }
 
@@ -152,7 +161,29 @@ export interface SessionView {
 export async function getSessionView(date: IsoDate): Promise<SessionView | null> {
   const session = await db.sessions.where('date').equals(date).first()
   if (!session) return null
+  return assembleSessionView(session)
+}
 
+/**
+ * The in-progress session, wherever its date lies. This is what the session
+ * screen follows: a workout that crosses midnight keeps its screen, and a
+ * session left unfinished yesterday is still reachable to be completed —
+ * keyed to the calendar it would simply vanish, stranding the logged work
+ * forever. Null when nothing is in progress. Skipped and completed sessions
+ * are never "active", so a stale tab on #/session goes home instead of
+ * logging into them.
+ */
+export async function getActiveSessionView(): Promise<SessionView | null> {
+  const inProgress = await db.sessions
+    .where('status')
+    .equals('in_progress')
+    .toArray()
+  const session = inProgress.sort((a, b) => b.date.localeCompare(a.date))[0]
+  if (!session) return null
+  return assembleSessionView(session)
+}
+
+async function assembleSessionView(session: Session): Promise<SessionView | null> {
   const template = await db.dayTemplates.get(session.dayTemplateId)
   if (!template) return null
 
@@ -178,12 +209,17 @@ export async function getSessionView(date: IsoDate): Promise<SessionView | null>
 }
 
 export async function getTodayView(date: IsoDate): Promise<TodayView> {
-  const [templates, mesocycle, session, sessions] = await Promise.all([
+  const [templates, mesocycle, session, sessions, settings] = await Promise.all([
     getDayTemplates(),
     getActiveMesocycle(),
     getSessionForDate(date),
     db.sessions.toArray(),
+    getSettings(),
   ])
+
+  const unfinishedSession = sessions
+    .filter((s) => s.status === 'in_progress' && s.date < date)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
 
   const template = templateForDate(templates, date)
   const exercises = template
@@ -197,9 +233,11 @@ export async function getTodayView(date: IsoDate): Promise<TodayView> {
     nextTemplate: templateForDate(templates, addDays(date, 1)),
     position: mesocycle ? mesocyclePosition(mesocycle, date) : null,
     session,
+    unfinishedSession,
     setsLoggedToday: session
       ? await db.sets.where('sessionId').equals(session.id).count()
       : 0,
+    cardioMinutes: settings?.lastCardio.durationMin ?? DEFAULT_CARDIO.durationMin,
     streak: currentStreak(templates, sessions, date),
   }
 }

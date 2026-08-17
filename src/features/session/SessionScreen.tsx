@@ -6,7 +6,7 @@ import { Screen } from '../../components/Screen'
 import { Stepper } from '../../components/Stepper'
 import { RestTimer } from './RestTimer'
 import {
-  getSessionView,
+  getActiveSessionView,
   getSettings,
   type ExerciseView,
   type SessionView,
@@ -18,7 +18,6 @@ import {
 } from '../../db/mutations'
 import type { CardioEntry, LoggedSet } from '../../db/schema'
 import { navigate } from '../../lib/router'
-import { useToday } from '../../lib/useToday'
 
 interface RestState {
   endsAt: number
@@ -35,18 +34,18 @@ interface RestState {
  * is what a killed tab will resume with (PLAN §2.1).
  */
 export function SessionScreen() {
-  const date = useToday()
-  const view = useLiveQuery(() => getSessionView(date), [date])
+  // Follows the in-progress session wherever its date lies — a workout that
+  // crosses midnight keeps its screen, and completing it makes this view null,
+  // which is also what sends a stale tab home. Skipped and completed sessions
+  // are never active, so nothing can log into them from here.
+  const view = useLiveQuery(() => getActiveSessionView(), [])
   const [rest, setRest] = useState<RestState | null>(null)
 
-  // No session for today (deep link, or completed elsewhere): go home. A
-  // completed session also lands here, since there is nothing left to log.
   useEffect(() => {
     if (view === null) navigate('/')
-    if (view && view.session.status === 'completed') navigate('/')
   }, [view])
 
-  if (!view || view.session.status === 'completed') return <Screen>{null}</Screen>
+  if (!view) return <Screen>{null}</Screen>
 
   return (
     <SessionBody
