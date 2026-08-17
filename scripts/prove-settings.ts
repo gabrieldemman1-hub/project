@@ -98,6 +98,9 @@ async function main(): Promise<void> {
     )
     const lightBg = await bg(page)
     check('light mode changes the background', lightBg !== darkBg)
+    // Buttons crossfade their colours over --duration-fast; let that finish
+    // so the evidence shows the settled theme, not a mid-transition frame.
+    await page.waitForTimeout(400)
     await page.screenshot({ path: resolve(OUT_DIR, 'settings-light.png') })
     await page.getByRole('button', { name: 'dark', exact: true }).click()
     await page.waitForFunction(

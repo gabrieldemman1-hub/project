@@ -278,7 +278,7 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 | 5 — Mesocycle and deload | ✅ Complete — six-week simulation gate passing |
 | 6 — History | ✅ Complete — three charts, screenshot gate with realistic data |
 | 7 — PWA and backup | ✅ Complete — installable, fully offline, export/import proven end to end in a real browser |
-| 8 — Polish | ⬜ Not started |
+| 8 — Polish | ✅ Complete — every screen critiqued against Part 7; three real mismatches found and fixed, the rest already held |
 
 ### Modified files
 
@@ -458,6 +458,14 @@ scripts/prove-offline.ts         the gate: airplane mode + backup round trip
 screenshots/offline-dashboard.png · restore-confirm.png
 ```
 
+**Phase 8:**
+```
+src/features/session/QuestionScreen.tsx   question bottom-anchored with answers
+src/features/dashboard/DashboardScreen.tsx  today marker survives rest days
+scripts/prove-settings.ts        theme screenshots wait for the crossfade
+screenshots/before/              the full pre-polish set, for comparison
+```
+
 ### Phase 5+6 notes
 
 - Deload sessions are invisible to progression, to the greyed targets, and
@@ -523,6 +531,44 @@ joint-pain flag moved to a deeper, duller red and those flags always carry a
 word as well as a colour. The light theme carries the same identity one step
 deeper for contrast on white. Recorded here rather than silently contradicting
 the brief.
+
+### Phase 8 notes — the Part 7 critique
+
+Every screen was re-shot and read against Part 7, line by line. The honest
+headline: most of Part 7 already held, because `scripts/screenshot.ts` has
+enforced its quality floor (44px targets in both dimensions, ≤2 glows,
+tabular figures, safe areas, action in the bottom third) at every phase gate
+since Phase 1 — the polish debt was paid continuously instead of saved up.
+Three real mismatches survived scrutiny; all three are fixed:
+
+1. **The feedback questions had a dead half-screen.** Question pinned to the
+   top, answers to the bottom, half a screen of black between them. Between
+   sets this is read at arm's length in one glance, so the question now sits
+   directly above the answers in the thumb's half; the step label stays up
+   top for orientation. (Before/after: `before/feedback-pump.png` vs
+   `feedback-pump.png`.)
+2. **Rest days lost the "you are here" marker.** The week board derives its
+   colours from the status ladder, where rest outranks today — right for
+   progression, but it meant a Sunday showed no today marker anywhere on the
+   board. A rest-day today now carries the same near-white bar as any other
+   today, and announces "today, rest day". (Before/after:
+   `before/dashboard-rest.png` vs `dashboard-rest.png`.)
+3. **The theme-switch evidence lied.** Buttons crossfade their colours over
+   140ms, and prove-settings screenshotted the instant the body repainted —
+   the light-mode shot showed a mid-transition dark slab that a user never
+   sees. The proof now lets the transition settle first. A capture fix, not
+   an app fix, but wrong evidence is its own defect.
+
+Read and accepted as deliberate, not fixed: the top-right "‹ Dashboard" /
+"⋯" affordances (owner-approved layout, secondary actions only); stat cards
+and the block strip cutting mid-element at the fold (that peeking edge is
+the scroll cue); the six red "missed" bars after an untrained week (that is
+the honest rendering — the seed and block-start logic anchor forward, so a
+"missed" day is always one the user could actually have trained); and the
+11px micro labels, which caption large numerals rather than carry content.
+
+Gates re-run after the fixes: 183 tests, production build, all six browser
+proofs, 16/16 device sweep.
 
 ### Phase 7 notes — PWA and backup
 

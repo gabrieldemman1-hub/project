@@ -35,12 +35,17 @@ export function QuestionScreen<T extends string>({
     <Screen>
       <p className="text-xs tracking-wider text-text-secondary uppercase">{step}</p>
 
-      <h1 className="mt-6 max-w-measure-tight text-2xl leading-snug text-balance text-text">
+      {/* The question sits directly above the answers rather than at the top
+          of the screen (Phase 8): between sets this is read at arm's length
+          in one glance, and a question separated from its answers by half a
+          screen of black made the eye travel for nothing. The step label
+          stays up top for orientation; everything that must be read and
+          tapped lives together in the thumb's half. */}
+      <h1 className="mt-auto max-w-measure-tight text-2xl leading-snug text-balance text-text">
         {question}
       </h1>
 
-      {/* Options pinned low, where the thumb already is. */}
-      <div className="mt-auto flex flex-col gap-3 pt-10">
+      <div className="mt-10 flex flex-col gap-3">
         {options.map((option) => (
           <button
             key={option.value}

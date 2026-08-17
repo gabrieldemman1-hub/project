@@ -268,7 +268,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 function DayChip({ day }: { day: WeekDay }) {
-  const style = chipStyle(day.status)
+  const style = chipStyle(day.status, day.isToday)
   return (
     <button
       type="button"
@@ -290,7 +290,16 @@ function DayChip({ day }: { day: WeekDay }) {
  * every chip also spells its state out to a screen reader, and the legend
  * above names each colour in words.
  */
-function chipStyle(status: WeekDayStatus): { chip: string; letter: string; bar: string } {
+function chipStyle(
+  status: WeekDayStatus,
+  isToday = false,
+): { chip: string; letter: string; bar: string } {
+  // A rest day that is *today* still gets the today marker (Phase 8): the
+  // status ladder puts rest above today, which is right for progression but
+  // left Sundays with no "you are here" on the board at all.
+  if (status === 'rest' && isToday) {
+    return { chip: 'bg-surface-raised', letter: 'text-text', bar: 'bg-text' }
+  }
   switch (status) {
     case 'completed':
       return { chip: 'bg-accent-surface', letter: 'text-accent', bar: 'bg-accent' }
@@ -326,7 +335,7 @@ function dayChipLabel(day: WeekDay): string {
     case 'missed':
       return `${which}, missed`
     case 'rest':
-      return `${which}, rest day`
+      return day.isToday ? `${which}, today, rest day` : `${which}, rest day`
     case 'upcoming':
     default:
       return `${which}, upcoming`
