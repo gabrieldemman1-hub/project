@@ -10,6 +10,7 @@ import type {
   DayTemplate,
   Exercise,
   IsoDate,
+  LoggedSet,
   Mesocycle,
   Session,
 } from './schema'
@@ -99,7 +100,81 @@ export interface TodayView {
   position: MesocyclePosition | null
   /** Today's session, if one has been started, completed or skipped. */
   session: Session | undefined
+  /** Sets logged in today's session, for the completed-day summary. */
+  setsLoggedToday: number
   streak: number
+}
+
+/**
+ * The most recent *completed* session's sets for an exercise, in set order —
+ * the greyed-out target to beat (BRIEF Part 5). In-progress and skipped
+ * sessions never count: an abandoned half-workout is not a benchmark.
+ */
+export async function getPreviousExerciseSets(
+  exerciseId: string,
+  excludeSessionId: string,
+): Promise<LoggedSet[]> {
+  const completed = await db.sessions
+    .where('status')
+    .equals('completed')
+    .toArray()
+
+  const candidates = completed
+    .filter((session) => session.id !== excludeSessionId)
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  for (const session of candidates) {
+    const sets = await db.sets
+      .where('[sessionId+exerciseId]')
+      .equals([session.id, exerciseId])
+      .sortBy('setIndex')
+    if (sets.length > 0) return sets
+  }
+
+  return []
+}
+
+/**
+ * Everything the session screen needs for one date, in one read. Null when no
+ * session exists for that date at all.
+ */
+export interface SessionView {
+  session: Session
+  template: DayTemplate
+  /** Ordered as the session runs. */
+  exercises: ExerciseView[]
+  /** Logged sets this session, keyed by exercise id, in set order. */
+  setsByExercise: Record<string, LoggedSet[]>
+  /** Last completed session's sets per exercise — the targets to beat. */
+  previousByExercise: Record<string, LoggedSet[]>
+}
+
+export async function getSessionView(date: IsoDate): Promise<SessionView | null> {
+  const session = await db.sessions.where('date').equals(date).first()
+  if (!session) return null
+
+  const template = await db.dayTemplates.get(session.dayTemplateId)
+  if (!template) return null
+
+  const exercises = await withMuscleGroupNames(
+    await getExercisesByIds(template.exerciseIds),
+  )
+
+  const sets = await db.sets.where('sessionId').equals(session.id).sortBy('setIndex')
+  const setsByExercise: Record<string, LoggedSet[]> = {}
+  for (const set of sets) {
+    ;(setsByExercise[set.exerciseId] ??= []).push(set)
+  }
+
+  const previousByExercise: Record<string, LoggedSet[]> = {}
+  for (const exercise of exercises) {
+    previousByExercise[exercise.id] = await getPreviousExerciseSets(
+      exercise.id,
+      session.id,
+    )
+  }
+
+  return { session, template, exercises, setsByExercise, previousByExercise }
 }
 
 export async function getTodayView(date: IsoDate): Promise<TodayView> {
@@ -122,6 +197,9 @@ export async function getTodayView(date: IsoDate): Promise<TodayView> {
     nextTemplate: templateForDate(templates, addDays(date, 1)),
     position: mesocycle ? mesocyclePosition(mesocycle, date) : null,
     session,
+    setsLoggedToday: session
+      ? await db.sets.where('sessionId').equals(session.id).count()
+      : 0,
     streak: currentStreak(templates, sessions, date),
   }
 }

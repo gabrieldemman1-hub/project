@@ -272,7 +272,7 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 |---|---|
 | Plan | ✅ Approved |
 | 1 — Skeleton and data layer | ✅ Complete — 67 tests passing, build passing, reviewed, verified on four phone sizes |
-| 2 — Logging | ⬜ Not started |
+| 2 — Logging | ✅ Complete — 88 tests passing, kill-and-resume proven in a real browser, deployed |
 | 3 — Engine | ⬜ Not started |
 | 4 — Engine wired in | ⬜ Not started |
 | 5 — Mesocycle and deload | ⬜ Not started |
@@ -307,6 +307,43 @@ src/lib/date.test.ts · src/lib/schedule.test.ts · src/db/seed.test.ts
 
 screenshots/home-training-day.png · home-rest-day.png
 ```
+
+**Phase 2:**
+```
+src/db/mutations.ts              every write: start/resume, saveSet, position,
+                                 complete, skip/undo — commit-before-render
+src/db/queries.ts                + getPreviousExerciseSets, getSessionView
+src/db/seed.ts                   + Sunday anchoring fix + untrained re-anchor
+src/lib/date.ts                  + upcomingTrainingWeekStart
+src/lib/router.ts                hash routing, ~30 lines
+src/components/Stepper.tsx       steppers first, tap-to-type second
+src/features/session/SessionScreen.tsx · RestTimer.tsx
+src/features/home/HomeScreen.tsx wired: Start / Resume / Skip / Done states
+src/App.tsx                      routes / and /session
+scripts/prove-resume.ts          the Phase 2 gate, in a real browser
+src/db/mutations.test.ts
+screenshots/resume-*.png · session-*.png
+```
+
+### Phase 2 notes
+
+- **The gate:** `npm run prove-resume` drives the production build in Chromium
+  at iPhone size: starts a session, logs sets across two exercises, kills the
+  page with no warning, opens a fresh one, and asserts from the rendered DOM
+  that it resumed on the right exercise with every set intact — then drives
+  the rest of the session through the timer and cardio to completion.
+- **Write contract:** a set is committed inside a Dexie transaction before
+  `saveSet` resolves; the UI renders logged sets only from a live query.
+  There is no optimistic set state anywhere.
+- Two defects found by the browser proof before any human saw them: the rest
+  timer rendered *behind* the action bar (untappable Dismiss), and the seed
+  anchored a Sunday install's mesocycle to the Monday six days past, reading
+  "Week 2 of 6" the day after install. Both fixed; the second also repairs
+  already-affected databases on next launch, as long as nothing has been
+  trained yet.
+- Deliberate scope note: a session left in progress at midnight stays attached
+  to its own date — the new day simply starts fresh. Nothing is lost; the
+  half-done session is just never counted as completed.
 
 ### Phase 1 notes
 

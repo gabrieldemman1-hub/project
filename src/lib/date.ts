@@ -81,6 +81,19 @@ export function startOfWeek(iso: IsoDate): IsoDate {
   return addDays(iso, -daysSinceMonday)
 }
 
+/**
+ * The Monday of the training week that `iso` belongs to *going forward*.
+ *
+ * Differs from `startOfWeek` on exactly one day: Sunday. Sunday is the rest
+ * day, so for scheduling history it belongs to the week just finished — but a
+ * mesocycle created on a Sunday must anchor to the week about to start, or its
+ * counter reads "Week 2" the day after installing the app without a single
+ * session trained.
+ */
+export function upcomingTrainingWeekStart(iso: IsoDate): IsoDate {
+  return weekdayOf(iso) === 0 ? addDays(iso, 1) : startOfWeek(iso)
+}
+
 /** Whole days from `from` to `to`. Negative when `to` is earlier. */
 export function daysBetween(from: IsoDate, to: IsoDate): number {
   const ms = fromIsoDate(to).getTime() - fromIsoDate(from).getTime()

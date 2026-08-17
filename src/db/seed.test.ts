@@ -171,6 +171,58 @@ describe('muscle groups', () => {
   })
 })
 
+describe('mesocycle anchoring', () => {
+  it('seeding on a Sunday anchors the block to the coming Monday, not the past one', async () => {
+    // Seeded Sunday 16 Aug: week 1 must be the week starting Monday the 17th.
+    // The naive startOfWeek answer (Monday the 10th) would read "Week 2 of 6"
+    // the day after installing the app, without a single session trained.
+    await seedIfEmpty(new Date(2026, 7, 16))
+    const mesocycle = await db.mesocycles.toCollection().first()
+    expect(mesocycle?.startDate).toBe('2026-08-17')
+  })
+
+  it('repairs an old wrongly-anchored block while nothing has been trained', async () => {
+    await seedIfEmpty(new Date(2026, 7, 16))
+    // Simulate the pre-fix state a phone may still carry.
+    const mesocycle = await db.mesocycles.toCollection().first()
+    if (!mesocycle) throw new Error('no mesocycle')
+    await db.mesocycles.update(mesocycle.id, { startDate: '2026-08-10' })
+
+    // Next launch (Monday the 17th) runs the seed again; with zero sessions it
+    // re-anchors to the current training week.
+    await seedIfEmpty(new Date(2026, 7, 17))
+    expect((await db.mesocycles.get(mesocycle.id))?.startDate).toBe('2026-08-17')
+  })
+
+  it('never moves the block once any session exists', async () => {
+    await seedIfEmpty(new Date(2026, 7, 16))
+    const mesocycle = await db.mesocycles.toCollection().first()
+    if (!mesocycle) throw new Error('no mesocycle')
+
+    const template = await db.dayTemplates.where('letter').equals('A').first()
+    if (!template) throw new Error('no template')
+    await db.sessions.add({
+      id: 'session-1',
+      date: '2026-08-17',
+      dayTemplateId: template.id,
+      mesocycleId: mesocycle.id,
+      weekNumber: 1,
+      isDeload: false,
+      status: 'completed',
+      currentExerciseIndex: 0,
+      cardio: null,
+      startedAt: 1,
+      completedAt: 2,
+      updatedAt: 2,
+    })
+
+    // A week of not launching, then a launch the following Sunday: the block
+    // must stay where the training history says it is.
+    await seedIfEmpty(new Date(2026, 7, 30))
+    expect((await db.mesocycles.get(mesocycle.id))?.startDate).toBe('2026-08-17')
+  })
+})
+
 describe('seedIfEmpty', () => {
   it('is idempotent — a second call writes nothing', async () => {
     expect(await seedIfEmpty(SEEDED_ON)).toBe(true)

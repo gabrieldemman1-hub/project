@@ -9,7 +9,7 @@
 import { db } from './db'
 import type { DayTemplate, Exercise, ExerciseType, MuscleGroup } from './schema'
 import { newId } from '../lib/ids'
-import { startOfWeek, toIsoDate } from '../lib/date'
+import { toIsoDate, upcomingTrainingWeekStart } from '../lib/date'
 
 export const DEFAULT_WEIGHT_INCREMENT_LB = 5
 export const DEFAULT_REST_COMPOUND_SECONDS = 150
@@ -202,6 +202,35 @@ export const SEED_DAYS: readonly SeedDay[] = [
   },
 ]
 
+/**
+ * Repairs a mesocycle created by the old Sunday seed bug.
+ *
+ * A database seeded on a Sunday before this fix anchored its first block to
+ * the Monday six days earlier, so the user's counter jumped to "Week 2" the
+ * day after install. While not a single session has ever been recorded, the
+ * block is provably untrained and can be safely re-anchored to the current
+ * training week. The moment any session exists — even a skipped one — this
+ * never moves anything again.
+ */
+async function reanchorUntrainedMesocycle(now: Date): Promise<void> {
+  await db.transaction('rw', [db.sessions, db.mesocycles, db.settings], async () => {
+    if ((await db.sessions.count()) > 0) return
+
+    const settings = await db.settings.get('app')
+    if (!settings) return
+    const mesocycle = await db.mesocycles.get(settings.activeMesocycleId)
+    if (!mesocycle || mesocycle.status !== 'active') return
+
+    const anchor = upcomingTrainingWeekStart(toIsoDate(now))
+    if (mesocycle.startDate === anchor) return
+
+    await db.mesocycles.update(mesocycle.id, {
+      startDate: anchor,
+      updatedAt: now.getTime(),
+    })
+  })
+}
+
 function defaultRestSeconds(type: ExerciseType): number {
   return type === 'compound'
     ? DEFAULT_REST_COMPOUND_SECONDS
@@ -218,7 +247,10 @@ function defaultRestSeconds(type: ExerciseType): number {
  */
 export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
   const alreadySeeded = await db.settings.get('app')
-  if (alreadySeeded) return false
+  if (alreadySeeded) {
+    await reanchorUntrainedMesocycle(now)
+    return false
+  }
 
   const timestamp = now.getTime()
 
@@ -308,7 +340,10 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
       await db.dayTemplates.bulkAdd(dayTemplates)
       await db.mesocycles.add({
         id: mesocycleId,
-        startDate: startOfWeek(toIsoDate(now)),
+        // upcomingTrainingWeekStart, not startOfWeek: seeding on a Sunday must
+        // anchor the block to the Monday about to start, not the one six days
+        // gone — otherwise the counter says "Week 2" before a single session.
+        startDate: upcomingTrainingWeekStart(toIsoDate(now)),
         totalWeeks: MESOCYCLE_TOTAL_WEEKS,
         deloadWeek: MESOCYCLE_DELOAD_WEEK,
         status: 'active',

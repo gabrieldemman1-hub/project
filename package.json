@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "print-program": "tsx scripts/print-program.ts",
+    "prove-resume": "tsx scripts/prove-resume.ts",
     "screenshot": "tsx scripts/screenshot.ts"
   },
   "dependencies": {

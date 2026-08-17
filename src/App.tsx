@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 
 import { HomeScreen } from './features/home/HomeScreen'
+import { SessionScreen } from './features/session/SessionScreen'
 import { seedIfEmpty } from './db/seed'
+import { useRoute } from './lib/router'
 
 /**
  * Phase 1 renders one screen. Routing arrives with the session screen in
@@ -12,6 +14,7 @@ import { seedIfEmpty } from './db/seed'
 export function App() {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const route = useRoute()
 
   useEffect(() => {
     // Idempotent — only writes on a genuinely empty database.
@@ -34,5 +37,5 @@ export function App() {
 
   if (!ready) return <div className="min-h-dvh bg-bg" />
 
-  return <HomeScreen />
+  return route === '/session' ? <SessionScreen /> : <HomeScreen />
 }

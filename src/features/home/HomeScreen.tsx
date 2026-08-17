@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Screen } from '../../components/Screen'
 import { getTodayView, type TodayView } from '../../db/queries'
+import { skipToday, startSession, undoSkip } from '../../db/mutations'
 import { formatLongDate } from '../../lib/date'
+import { navigate } from '../../lib/router'
 import { useToday } from '../../lib/useToday'
 
 /**
@@ -26,20 +29,70 @@ export function HomeScreen() {
 }
 
 function TrainingDay({ view }: { view: TodayView }) {
-  const { template, exercises, position, streak, date } = view
+  const { template, exercises, position, streak, date, session } = view
+  const [starting, setStarting] = useState(false)
   if (!template) return null
+
+  const completed = session?.status === 'completed'
+  const skipped = session?.status === 'skipped'
+  const inProgress = session?.status === 'in_progress'
+
+  async function start() {
+    if (starting) return
+    setStarting(true)
+    try {
+      await startSession(date)
+      navigate('/session')
+    } finally {
+      setStarting(false)
+    }
+  }
 
   return (
     <Screen
       action={
-        // Wired up in Phase 2. Disabled rather than absent so the screen is
-        // composed against its real primary action.
-        <>
-          <Button disabled>Start session</Button>
-          <p className="mt-4 text-center text-xs tracking-wider text-text-muted uppercase">
-            Logging arrives next phase
+        completed ? (
+          <p className="text-center text-xs tracking-wider text-text-secondary uppercase">
+            Session complete
+            <span className="mx-2 text-text-muted">·</span>
+            <span className="num text-text">{view.setsLoggedToday}</span> sets
+            {session?.cardio ? (
+              <>
+                <span className="mx-2 text-text-muted">·</span>
+                <span className="num text-text">{session.cardio.durationMin}</span> min
+                cardio
+              </>
+            ) : null}
           </p>
-        </>
+        ) : skipped ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-xs tracking-wider text-text-secondary uppercase">
+              Skipped today
+            </p>
+            <button
+              type="button"
+              onClick={() => void undoSkip(date)}
+              className="min-h-touch-min rounded-md border border-border bg-surface-raised text-sm text-text-secondary"
+            >
+              Undo skip
+            </button>
+          </div>
+        ) : (
+          <>
+            <Button onClick={() => void start()} disabled={starting}>
+              {inProgress ? 'Resume session' : 'Start session'}
+            </Button>
+            {!inProgress ? (
+              <button
+                type="button"
+                onClick={() => void skipToday(date)}
+                className="mt-3 min-h-touch-min w-full rounded-md text-xs tracking-wider text-text-muted uppercase"
+              >
+                Skip today
+              </button>
+            ) : null}
+          </>
+        )
       }
     >
       <Header date={date} position={position} />

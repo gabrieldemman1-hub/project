@@ -1,0 +1,408 @@
+import { useEffect, useRef, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+
+import { Button } from '../../components/Button'
+import { Screen } from '../../components/Screen'
+import { Stepper } from '../../components/Stepper'
+import { RestTimer } from './RestTimer'
+import {
+  getSessionView,
+  getSettings,
+  type ExerciseView,
+  type SessionView,
+} from '../../db/queries'
+import {
+  completeSession,
+  saveSet,
+  setSessionPosition,
+} from '../../db/mutations'
+import type { CardioEntry, LoggedSet } from '../../db/schema'
+import { navigate } from '../../lib/router'
+import { useToday } from '../../lib/useToday'
+
+interface RestState {
+  endsAt: number
+  totalSeconds: number
+}
+
+/**
+ * The session flow (BRIEF Part 6): one exercise at a time, swipe or tap to
+ * move, steppers for weight and reps, a rest timer that starts itself when a
+ * set is logged, and cardio as the final step before completion.
+ *
+ * Everything rendered as "logged" comes from a live query over IndexedDB —
+ * there is no optimistic set state anywhere, so what the screen shows saved
+ * is what a killed tab will resume with (PLAN §2.1).
+ */
+export function SessionScreen() {
+  const date = useToday()
+  const view = useLiveQuery(() => getSessionView(date), [date])
+  const [rest, setRest] = useState<RestState | null>(null)
+
+  // No session for today (deep link, or completed elsewhere): go home. A
+  // completed session also lands here, since there is nothing left to log.
+  useEffect(() => {
+    if (view === null) navigate('/')
+    if (view && view.session.status === 'completed') navigate('/')
+  }, [view])
+
+  if (!view || view.session.status === 'completed') return <Screen>{null}</Screen>
+
+  return (
+    <SessionBody
+      key={view.session.id}
+      view={view}
+      rest={rest}
+      onRest={setRest}
+    />
+  )
+}
+
+function SessionBody({
+  view,
+  rest,
+  onRest,
+}: {
+  view: SessionView
+  rest: RestState | null
+  onRest: (rest: RestState | null) => void
+}) {
+  const { session, exercises } = view
+  // The position is owned by the database so a killed app resumes in place;
+  // local state only mirrors it for instant navigation.
+  const [index, setIndex] = useState(session.currentExerciseIndex)
+
+  const clamped = Math.min(index, exercises.length)
+  const onCardio = clamped >= exercises.length
+
+  function go(next: number) {
+    const target = Math.max(0, Math.min(next, exercises.length))
+    setIndex(target)
+    // Fire-and-forget: position is a convenience, never worth blocking a tap.
+    void setSessionPosition(session.id, target)
+  }
+
+  // Swipe between exercises; tap targets exist too, so this is an extra, not
+  // the only path.
+  const touchStartX = useRef<number | null>(null)
+  function onTouchStart(event: React.TouchEvent) {
+    touchStartX.current = event.touches[0]?.clientX ?? null
+  }
+  function onTouchEnd(event: React.TouchEvent) {
+    const start = touchStartX.current
+    touchStartX.current = null
+    const end = event.changedTouches[0]?.clientX
+    if (start === null || end === undefined) return
+    const delta = end - start
+    if (Math.abs(delta) < 60) return
+    go(delta < 0 ? clamped + 1 : clamped - 1)
+  }
+
+  if (onCardio) {
+    return (
+      <CardioPane
+        sessionId={session.id}
+        onBack={() => go(exercises.length - 1)}
+      />
+    )
+  }
+
+  const exercise = exercises[clamped]
+  if (!exercise) return <Screen>{null}</Screen>
+
+  return (
+    <ExercisePane
+      key={exercise.id}
+      exercise={exercise}
+      position={clamped}
+      total={exercises.length}
+      sets={view.setsByExercise[exercise.id] ?? []}
+      previous={view.previousByExercise[exercise.id] ?? []}
+      sessionId={session.id}
+      rest={rest}
+      onRest={onRest}
+      onPrev={clamped > 0 ? () => go(clamped - 1) : null}
+      onNext={() => go(clamped + 1)}
+      isLast={clamped === exercises.length - 1}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    />
+  )
+}
+
+function ExercisePane({
+  exercise,
+  position,
+  total,
+  sets,
+  previous,
+  sessionId,
+  rest,
+  onRest,
+  onPrev,
+  onNext,
+  isLast,
+  onTouchStart,
+  onTouchEnd,
+}: {
+  exercise: ExerciseView
+  position: number
+  total: number
+  sets: LoggedSet[]
+  previous: LoggedSet[]
+  sessionId: string
+  rest: RestState | null
+  onRest: (rest: RestState | null) => void
+  onPrev: (() => void) | null
+  onNext: () => void
+  isLast: boolean
+  onTouchStart: (event: React.TouchEvent) => void
+  onTouchEnd: (event: React.TouchEvent) => void
+}) {
+  const nextSetIndex = sets.length
+  const lastLogged = sets[sets.length - 1]
+  const prevForNext = previous[nextSetIndex]
+
+  // Sensible starting numbers, best signal first: the set just done, then
+  // last session's same set, then last session's first set, then rep floor.
+  const [weight, setWeight] = useState(
+    () =>
+      lastLogged?.weightLb ??
+      prevForNext?.weightLb ??
+      previous[0]?.weightLb ??
+      0,
+  )
+  const [reps, setReps] = useState(
+    () =>
+      lastLogged?.reps ??
+      prevForNext?.reps ??
+      previous[0]?.reps ??
+      exercise.repTargetMin,
+  )
+  const [saving, setSaving] = useState(false)
+
+  async function logSet() {
+    if (saving || weight <= 0 || reps <= 0) return
+    setSaving(true)
+    try {
+      // The write starts on the tap and the row below only appears once the
+      // transaction has committed and the live query refreshes.
+      await saveSet({ sessionId, exerciseId: exercise.id, setIndex: nextSetIndex, weightLb: weight, reps })
+      onRest({
+        endsAt: Date.now() + exercise.restSeconds * 1000,
+        totalSeconds: exercise.restSeconds,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Screen
+      action={
+        <Button onClick={() => void logSet()} disabled={saving || weight <= 0 || reps <= 0}>
+          {saving ? 'Saving…' : `Log set ${nextSetIndex + 1}`}
+        </Button>
+      }
+    >
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="flex min-h-full flex-col">
+        <header className="flex items-baseline justify-between gap-4">
+          <p className="text-xs tracking-wider text-text-secondary uppercase">
+            Exercise <span className="num text-text">{position + 1}</span> of{' '}
+            <span className="num text-text">{total}</span>
+          </p>
+          <p className="shrink-0 text-xs tracking-wider text-text-secondary uppercase">
+            {exercise.muscleGroupName}
+          </p>
+        </header>
+
+        <h1 className="mt-6 text-xl leading-snug text-balance text-text">
+          {exercise.name}
+        </h1>
+        <p className="mt-2 text-xs tracking-wider text-text-secondary uppercase">
+          {exercise.repTargetMin}–{exercise.repTargetMax} reps
+          <span className="mx-2 text-text-muted">·</span>
+          <span className="num">{exercise.restSeconds}s</span> rest
+        </p>
+
+        {sets.length > 0 || previous.length > 0 ? (
+          <ul className="mt-8 flex flex-col gap-2">
+            {Array.from(
+              { length: Math.max(sets.length, previous.length) },
+              (_, setIndex) => {
+                const logged = sets[setIndex]
+                const target = previous[setIndex]
+                return (
+                  <li
+                    key={setIndex}
+                    className="flex min-h-touch-min items-center gap-4 rounded-md border border-border bg-surface px-4"
+                  >
+                    <span className="num w-5 shrink-0 text-sm text-text-muted">
+                      {setIndex + 1}
+                    </span>
+                    {/* Last session, greyed: the target to beat. */}
+                    <span className="num w-20 shrink-0 text-sm text-text-muted">
+                      {target ? `${target.weightLb} × ${target.reps}` : '—'}
+                    </span>
+                    <span className="num flex-1 text-right text-base text-text">
+                      {logged ? `${logged.weightLb} × ${logged.reps}` : ''}
+                    </span>
+                  </li>
+                )
+              },
+            )}
+          </ul>
+        ) : null}
+
+        <div className="mt-8 flex flex-col gap-5">
+          <div>
+            <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
+              Weight
+            </p>
+            <Stepper
+              label="Weight"
+              value={weight}
+              step={exercise.weightIncrementLb}
+              unit="lb"
+              onChange={setWeight}
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
+              Reps
+            </p>
+            <Stepper label="Reps" value={reps} step={1} onChange={setReps} />
+          </div>
+        </div>
+
+        <div className="mt-auto flex gap-3 pt-8">
+          <button
+            type="button"
+            onClick={onPrev ?? undefined}
+            disabled={!onPrev}
+            className="min-h-touch-min flex-1 rounded-md border border-border bg-surface-raised text-sm text-text-secondary disabled:opacity-30"
+          >
+            ‹ Previous
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            className="min-h-touch-min flex-1 rounded-md border border-border bg-surface-raised text-sm text-text"
+          >
+            {isLast ? 'Cardio ›' : 'Next ›'}
+          </button>
+        </div>
+      </div>
+
+      {rest ? (
+        <RestTimer
+          endsAt={rest.endsAt}
+          totalSeconds={rest.totalSeconds}
+          onDismiss={() => onRest(null)}
+        />
+      ) : null}
+    </Screen>
+  )
+}
+
+function CardioPane({
+  sessionId,
+  onBack,
+}: {
+  sessionId: string
+  onBack: () => void
+}) {
+  const defaults = useLiveQuery(
+    async () => (await getSettings())?.lastCardio ?? null,
+    [],
+  )
+
+  if (defaults === undefined) return <Screen>{null}</Screen>
+  return (
+    <CardioForm
+      sessionId={sessionId}
+      initial={defaults ?? { durationMin: 45, inclinePct: 10, speedMph: 3 }}
+      onBack={onBack}
+    />
+  )
+}
+
+function CardioForm({
+  sessionId,
+  initial,
+  onBack,
+}: {
+  sessionId: string
+  initial: CardioEntry
+  onBack: () => void
+}) {
+  // Pre-filled with 45 min and last session's settings: confirming is one tap
+  // (BRIEF Part 6).
+  const [duration, setDuration] = useState(initial.durationMin)
+  const [incline, setIncline] = useState(initial.inclinePct)
+  const [speed, setSpeed] = useState(initial.speedMph)
+  const [saving, setSaving] = useState(false)
+
+  async function finish() {
+    if (saving) return
+    setSaving(true)
+    try {
+      await completeSession(sessionId, {
+        durationMin: duration,
+        inclinePct: incline,
+        speedMph: speed,
+      })
+      navigate('/')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Screen
+      action={
+        <Button onClick={() => void finish()} disabled={saving}>
+          {saving ? 'Saving…' : 'Finish session'}
+        </Button>
+      }
+    >
+      <header className="flex items-baseline justify-between gap-4">
+        <p className="text-xs tracking-wider text-text-secondary uppercase">Cardio</p>
+      </header>
+
+      <h1 className="mt-6 text-xl text-text">Incline walk</h1>
+      <p className="mt-2 max-w-measure-base text-sm text-text-secondary">
+        Pre-filled from last time. Adjust if today was different.
+      </p>
+
+      <div className="mt-10 flex flex-col gap-6">
+        <div>
+          <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
+            Duration
+          </p>
+          <Stepper label="Duration" value={duration} step={5} min={5} unit="min" onChange={setDuration} />
+        </div>
+        <div>
+          <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
+            Incline
+          </p>
+          <Stepper label="Incline" value={incline} step={1} unit="%" onChange={setIncline} />
+        </div>
+        <div>
+          <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
+            Speed
+          </p>
+          <Stepper label="Speed" value={speed} step={0.5} min={0.5} unit="mph" onChange={setSpeed} />
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-10 min-h-touch-min rounded-md border border-border bg-surface-raised px-4 text-sm text-text-secondary"
+      >
+        ‹ Back to exercises
+      </button>
+    </Screen>
+  )
+}
