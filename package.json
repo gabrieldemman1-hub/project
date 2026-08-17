@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "print-program": "tsx scripts/print-program.ts",
     "prove-resume": "tsx scripts/prove-resume.ts",
-    "screenshot": "tsx scripts/screenshot.ts"
+    "screenshot": "tsx scripts/screenshot.ts",
+    "walkthrough": "tsx scripts/walkthrough.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

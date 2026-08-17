@@ -4,6 +4,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Button } from '../../components/Button'
 import { Screen } from '../../components/Screen'
 import { Stepper } from '../../components/Stepper'
+import { FeedbackFlow } from './FeedbackFlow'
+import { QuestionScreen } from './QuestionScreen'
 import { RestTimer } from './RestTimer'
 import {
   getActiveSessionView,
@@ -13,10 +15,18 @@ import {
 } from '../../db/queries'
 import {
   completeSession,
+  generatePrescriptions,
+  saveExerciseFeedback,
   saveSet,
+  saveSorenessFeedback,
   setSessionPosition,
 } from '../../db/mutations'
-import type { CardioEntry, LoggedSet } from '../../db/schema'
+import type {
+  CardioEntry,
+  LoggedSet,
+  Prescription,
+  Soreness,
+} from '../../db/schema'
 import { navigate } from '../../lib/router'
 
 interface RestState {
@@ -70,12 +80,60 @@ function SessionBody({
   // The position is owned by the database so a killed app resumes in place;
   // local state only mirrors it for instant navigation.
   const [index, setIndex] = useState(session.currentExerciseIndex)
+  /** The exercise owing pump/RIR answers, and where to go once given. */
+  const [pendingFeedback, setPendingFeedback] = useState<{
+    exerciseId: string
+    thenGo: number | null
+  } | null>(null)
 
   const clamped = Math.min(index, exercises.length)
   const onCardio = clamped >= exercises.length
 
+  const unansweredSoreness = view.sorenessPrompts.filter((p) => !p.answered)
+  const hasPrescriptions = Object.keys(view.prescriptionsByExercise).length > 0
+
+  // Prescriptions follow the last soreness answer. This effect is the safety
+  // net for the killed-in-between case: prompts all answered (or none exist,
+  // as on a deload) but no plan stored yet. generatePrescriptions is
+  // idempotent, so racing the answer handler is harmless.
+  const generating = useRef(false)
+  useEffect(() => {
+    if (
+      unansweredSoreness.length === 0 &&
+      !hasPrescriptions &&
+      exercises.length > 0 &&
+      !generating.current
+    ) {
+      generating.current = true
+      void generatePrescriptions(session.id).finally(() => {
+        generating.current = false
+      })
+    }
+  }, [unansweredSoreness.length, hasPrescriptions, exercises.length, session.id])
+
+  /** Feedback owed for an exercise being left: sets logged, none given yet. */
+  function feedbackOwedFor(exerciseIndex: number): string | null {
+    if (session.isDeload) return null
+    const exercise = exercises[exerciseIndex]
+    if (!exercise) return null
+    const logged = view.setsByExercise[exercise.id]?.length ?? 0
+    if (logged === 0) return null
+    if (view.feedbackByExercise[exercise.id]) return null
+    return exercise.id
+  }
+
   function go(next: number) {
     const target = Math.max(0, Math.min(next, exercises.length))
+    // Leaving an exercise that has work but no feedback: ask first, moving on
+    // after the answers. Moving backwards never triggers it — the exercise
+    // may not be finished.
+    if (target > clamped) {
+      const owed = feedbackOwedFor(clamped)
+      if (owed) {
+        setPendingFeedback({ exerciseId: owed, thenGo: target })
+        return
+      }
+    }
     setIndex(target)
     // Fire-and-forget: position is a convenience, never worth blocking a tap.
     void setSessionPosition(session.id, target)
@@ -97,6 +155,55 @@ function SessionBody({
     go(delta < 0 ? clamped + 1 : clamped - 1)
   }
 
+  // The day's soreness questions come before any lifting (BRIEF Part 5).
+  const firstUnanswered = unansweredSoreness[0]
+  if (firstUnanswered) {
+    const total = view.sorenessPrompts.length
+    const answered = total - unansweredSoreness.length
+    return (
+      <QuestionScreen<Soreness>
+        step={`Check-in · ${answered + 1} of ${total}`}
+        question={`How sore is your ${firstUnanswered.muscleGroupName.toLowerCase()} from last time?`}
+        options={[
+          { value: 'none', label: 'Not sore' },
+          { value: 'a_little', label: 'A little' },
+          { value: 'still_sore', label: 'Still sore', alert: true },
+        ]}
+        onAnswer={(soreness) => {
+          void (async () => {
+            await saveSorenessFeedback(session.id, firstUnanswered.muscleGroupId, soreness)
+            // The last answer unlocks the day's plan.
+            if (unansweredSoreness.length === 1) {
+              await generatePrescriptions(session.id)
+            }
+          })()
+        }}
+      />
+    )
+  }
+
+  // Pump/RIR/joint pain for an exercise just finished.
+  if (pendingFeedback) {
+    const exercise = exercises.find((e) => e.id === pendingFeedback.exerciseId)
+    return (
+      <FeedbackFlow
+        key={pendingFeedback.exerciseId}
+        exerciseName={exercise?.name ?? 'Exercise'}
+        onComplete={(feedback) => {
+          void (async () => {
+            await saveExerciseFeedback(session.id, pendingFeedback.exerciseId, feedback)
+            const target = pendingFeedback.thenGo
+            setPendingFeedback(null)
+            if (target !== null) {
+              setIndex(target)
+              void setSessionPosition(session.id, target)
+            }
+          })()
+        }}
+      />
+    )
+  }
+
   if (onCardio) {
     return (
       <CardioPane
@@ -109,10 +216,12 @@ function SessionBody({
   const exercise = exercises[clamped]
   if (!exercise) return <Screen>{null}</Screen>
 
+  const prescription = view.prescriptionsByExercise[exercise.id]
   return (
     <ExercisePane
       key={exercise.id}
       exercise={exercise}
+      prescription={prescription}
       position={clamped}
       total={exercises.length}
       sets={view.setsByExercise[exercise.id] ?? []}
@@ -120,6 +229,13 @@ function SessionBody({
       sessionId={session.id}
       rest={rest}
       onRest={onRest}
+      onLoggedLastPlannedSet={() => {
+        // Called straight after a saveSet, so don't rely on the live query
+        // having refreshed — the set that triggered this is proof of work.
+        if (!session.isDeload && !view.feedbackByExercise[exercise.id]) {
+          setPendingFeedback({ exerciseId: exercise.id, thenGo: null })
+        }
+      }}
       onPrev={clamped > 0 ? () => go(clamped - 1) : null}
       onNext={() => go(clamped + 1)}
       isLast={clamped === exercises.length - 1}
@@ -131,6 +247,7 @@ function SessionBody({
 
 function ExercisePane({
   exercise,
+  prescription,
   position,
   total,
   sets,
@@ -138,6 +255,7 @@ function ExercisePane({
   sessionId,
   rest,
   onRest,
+  onLoggedLastPlannedSet,
   onPrev,
   onNext,
   isLast,
@@ -145,6 +263,7 @@ function ExercisePane({
   onTouchEnd,
 }: {
   exercise: ExerciseView
+  prescription: Prescription | undefined
   position: number
   total: number
   sets: LoggedSet[]
@@ -152,6 +271,7 @@ function ExercisePane({
   sessionId: string
   rest: RestState | null
   onRest: (rest: RestState | null) => void
+  onLoggedLastPlannedSet: () => void
   onPrev: (() => void) | null
   onNext: () => void
   isLast: boolean
@@ -162,11 +282,12 @@ function ExercisePane({
   const lastLogged = sets[sets.length - 1]
   const prevForNext = previous[nextSetIndex]
 
-  // Sensible starting numbers, best signal first: the set just done, then
-  // last session's same set, then last session's first set, then rep floor.
+  // Starting numbers, best signal first: the set just done, then the engine's
+  // prescription, then last session, then the rep floor.
   const [weight, setWeight] = useState(
     () =>
       lastLogged?.weightLb ??
+      prescription?.plannedWeightLb ??
       prevForNext?.weightLb ??
       previous[0]?.weightLb ??
       0,
@@ -186,11 +307,23 @@ function ExercisePane({
     try {
       // The write starts on the tap and the row below only appears once the
       // transaction has committed and the live query refreshes.
-      await saveSet({ sessionId, exerciseId: exercise.id, setIndex: nextSetIndex, weightLb: weight, reps })
+      await saveSet({
+        sessionId,
+        exerciseId: exercise.id,
+        setIndex: nextSetIndex,
+        weightLb: weight,
+        reps,
+        prescribedWeightLb: prescription?.plannedWeightLb ?? null,
+        prescribedReps: prescription?.minRepsToBeat ?? null,
+      })
       onRest({
         endsAt: Date.now() + exercise.restSeconds * 1000,
         totalSeconds: exercise.restSeconds,
       })
+      // The last planned set triggers the feedback questions (BRIEF Part 5).
+      if (prescription && nextSetIndex + 1 >= prescription.plannedSets) {
+        onLoggedLastPlannedSet()
+      }
     } finally {
       setSaving(false)
     }
@@ -200,7 +333,11 @@ function ExercisePane({
     <Screen
       action={
         <Button onClick={() => void logSet()} disabled={saving || weight <= 0 || reps <= 0}>
-          {saving ? 'Saving…' : `Log set ${nextSetIndex + 1}`}
+          {saving
+            ? 'Saving…'
+            : prescription && nextSetIndex < prescription.plannedSets
+              ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
+              : `Log set ${nextSetIndex + 1}`}
         </Button>
       }
     >
@@ -219,15 +356,34 @@ function ExercisePane({
           {exercise.name}
         </h1>
         <p className="mt-2 text-xs tracking-wider text-text-secondary uppercase">
+          {prescription ? (
+            <>
+              <span className="num">{prescription.plannedSets}</span> sets
+              <span className="mx-2 text-text-muted">·</span>
+            </>
+          ) : null}
           {exercise.repTargetMin}–{exercise.repTargetMax} reps
           <span className="mx-2 text-text-muted">·</span>
           <span className="num">{exercise.restSeconds}s</span> rest
         </p>
 
-        {sets.length > 0 || previous.length > 0 ? (
+        {/* The engine explains itself in one sentence (BRIEF Part 5). */}
+        {prescription ? (
+          <div className="mt-5 rounded-md border border-border bg-surface px-4 py-3">
+            <p className="text-sm leading-relaxed text-text">{prescription.sentence}</p>
+          </div>
+        ) : null}
+
+        {sets.length > 0 || previous.length > 0 || prescription ? (
           <ul className="mt-8 flex flex-col gap-2">
             {Array.from(
-              { length: Math.max(sets.length, previous.length) },
+              {
+                length: Math.max(
+                  sets.length,
+                  previous.length,
+                  prescription?.plannedSets ?? 0,
+                ),
+              },
               (_, setIndex) => {
                 const logged = sets[setIndex]
                 const target = previous[setIndex]

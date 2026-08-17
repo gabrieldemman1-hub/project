@@ -273,8 +273,8 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 | Plan | ✅ Approved |
 | 1 — Skeleton and data layer | ✅ Complete — 67 tests passing, build passing, reviewed, verified on four phone sizes |
 | 2 — Logging | ✅ Complete — 88 tests passing, kill-and-resume proven in a real browser, deployed |
-| 3 — Engine | ⬜ Not started |
-| 4 — Engine wired in | ⬜ Not started |
+| 3 — Engine | ✅ Complete — 41 spec-derived tests, all rules covered |
+| 4 — Engine wired in | ✅ Complete — prompts, prescriptions, sentences live; walkthrough + browser proof passing |
 | 5 — Mesocycle and deload | ⬜ Not started |
 | 6 — History | ⬜ Not started |
 | 7 — PWA and backup | ⬜ Not started |
@@ -344,6 +344,53 @@ screenshots/resume-*.png · session-*.png
 - Deliberate scope note: a session left in progress at midnight stays attached
   to its own date — the new day simply starts fresh. Nothing is lost; the
   half-done session is just never counted as completed.
+
+**Phases 3 + 4 (built together at the product owner's request):**
+```
+src/engine/types.ts · sets.ts · load.ts · deload.ts · sentence.ts · recommend.ts
+src/engine/recommend.test.ts     41 tests, written from the brief first
+src/db/schema.ts                 feedback vocabulary now imported from the engine
+src/db/mutations.ts              + saveSorenessFeedback, saveExerciseFeedback,
+                                 generatePrescriptions (engine adapter)
+src/db/queries.ts                + prescriptions/feedback/prompts in SessionView;
+                                 restructured into Promise.all batches (see notes)
+src/db/prescriptions.test.ts     the full loop: session 1 feedback → session 2 numbers
+src/features/session/QuestionScreen.tsx · FeedbackFlow.tsx
+src/features/session/SessionScreen.tsx   check-in flow, recommendation banner,
+                                 feedback triggers, prescription-aware logging
+scripts/walkthrough.ts           Phase 4 gate: two consecutive sessions, asserted
+scripts/prove-resume.ts          extended through check-in + feedback + resume
+screenshots/feedback-*.png · session-recommendation.png
+```
+
+### Phase 3+4 notes
+
+- **Phase 3 gate:** 41 engine tests written from BRIEF Part 5 before the
+  implementation — all nine matrix cells, all four RIR cases, the
+  consecutive-increase guard (including a five-session chain), the
+  below-floor override beating RIR/joint-pain/still-sore, both clamps, the
+  deload rounding tie, first-time, skipped feedback, purity. Tests-first
+  caught one real divergence: a blocked consecutive increase must chase reps,
+  not just hold.
+- **Phase 4 gate:** `npm run walkthrough` simulates two consecutive Day A
+  sessions and asserts every prescription changes exactly as the rules say —
+  five exercises covering increase, double-increment-worthy, chase-reps,
+  repeat, and joint-pain-hold, each with its sentence. `npm run prove-resume`
+  drives the real UI through check-in → recommendation → logging → feedback →
+  kill → resume → auto-feedback on the last planned set → cardio → completion.
+- **A serious bug found by the browser gate, invisible to every unit test:**
+  Dexie's live-query dependency tracking silently died partway through the
+  session view's long chain of sequential awaits, so the UI never refreshed
+  after a soreness answer — the check-in froze on its first question, with the
+  data correctly written underneath. Diagnosed by bisection down to which
+  table writes woke the view; fixed by restructuring `assembleSessionView` so
+  every table read starts synchronously inside Promise.all batches, and
+  verified by a reactivity probe across all five tables. The shape of that
+  function is now load-bearing and commented as such.
+- The §2.3 prompt-count decision is now live as recommended: 2 check-in
+  questions on Days A and B, 3 on Day C, with calves inheriting the quads
+  answer. Standing offer: say the word to switch any day to the full per-muscle
+  list — it is data, not code.
 
 ### Phase 2 review, and what it changed
 

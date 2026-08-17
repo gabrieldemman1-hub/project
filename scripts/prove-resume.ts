@@ -1,12 +1,11 @@
 /**
- * Phase 2 gate (BRIEF Part 8): "kill the tab mid-session, reopen, and prove
- * the session resumes with the logged sets intact."
+ * Phase 2 gate, extended through Phase 4: "kill the tab mid-session, reopen,
+ * and prove the session resumes with the logged sets intact" — now with the
+ * soreness check-in, the engine's recommendation on screen, and the
+ * pump/RIR/joint-pain feedback flow in the loop.
  *
- * Drives the real production build in a real Chromium at iPhone size:
- * starts a session, logs sets across two exercises, kills the page with no
- * warning, opens a fresh one against the same origin storage, and asserts —
- * from what is actually rendered on screen — that the session resumed on the
- * right exercise with every set still there.
+ * Drives the real production build in a real Chromium at iPhone size, and
+ * captures the feedback screens as the Phase 4 gate screenshots.
  *
  *   npm run build && npm run prove-resume
  */
@@ -54,24 +53,8 @@ async function typeIntoStepper(page: Page, label: string, value: string) {
   await input.press('Enter')
 }
 
-async function openApp(context: Awaited<ReturnType<typeof newContext>>, url: string) {
-  const page = await context.newPage()
-  await page.clock.setFixedTime(FROZEN_DATE)
-  await page.goto(url, { waitUntil: 'networkidle' })
-  await page.waitForFunction(
-    () => (document.querySelector('main')?.textContent?.length ?? 0) > 0,
-  )
-  return page
-}
-
-async function newContext(browser: Awaited<ReturnType<typeof chromium.launch>>) {
-  return browser.newContext({
-    viewport: VIEWPORT,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-    colorScheme: 'dark',
-  })
+async function shot(page: Page, name: string) {
+  await page.screenshot({ path: resolve(OUT_DIR, `${name}.png`) })
 }
 
 async function main(): Promise<void> {
@@ -89,68 +72,99 @@ async function main(): Promise<void> {
   const browser = await chromium.launch(executablePath ? { executablePath } : {})
   // One context = one origin storage. Pages come and go; IndexedDB stays —
   // exactly the browser's own kill-and-reopen behaviour.
-  const context = await newContext(browser)
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+    colorScheme: 'dark',
+  })
+
+  async function openApp(): Promise<Page> {
+    const page = await context.newPage()
+    await page.clock.setFixedTime(FROZEN_DATE)
+    await page.goto(url, { waitUntil: 'networkidle' })
+    await page.waitForFunction(
+      () => (document.querySelector('main')?.textContent?.length ?? 0) > 0,
+    )
+    return page
+  }
 
   try {
-    console.log('\nSESSION — log sets, then kill the tab without warning')
-    const page = await openApp(context, url)
-
+    console.log('\nCHECK-IN — the soreness questions come before any lifting')
+    const page = await openApp()
     await page.getByRole('button', { name: 'Start session' }).click()
-    await page.getByRole('button', { name: /^Log set 1$/ }).waitFor()
 
-    // Exercise 1: incline press. Type the opening weight, then log two sets.
+    await page.getByText('How sore is your chest').waitFor()
+    await shot(page, 'feedback-soreness')
+    check('soreness asked for the chest first', true)
+    await page.getByRole('button', { name: 'Not sore' }).click()
+    await page.getByText('How sore is your triceps').waitFor()
+    await page.getByRole('button', { name: 'Not sore' }).click()
+
+    console.log('\nRECOMMENDATION — the engine explains itself on the exercise')
+    await page.getByText(/First time — pick a weight/).waitFor()
+    check(
+      'first-time sentence shown with 3 planned sets',
+      (await page.getByRole('button', { name: 'Log set 1 of 3' }).count()) === 1,
+    )
+    await shot(page, 'session-recommendation')
+
+    console.log('\nSESSION — log sets, then kill the tab without warning')
     await typeIntoStepper(page, 'Weight', '185')
-    await page.getByRole('button', { name: 'Log set 1' }).click()
-    await page.getByRole('button', { name: /^Log set 2$/ }).waitFor()
+    await page.getByRole('button', { name: 'Log set 1 of 3' }).click()
+    await page.getByRole('button', { name: 'Dismiss' }).waitFor()
+    check('rest timer counts down from 2:30', (await page.getByText('2:30').count()) === 1)
+    await shot(page, 'session-rest-timer')
     await page.getByRole('button', { name: 'Dismiss' }).click()
 
     await page.getByRole('button', { name: 'Decrease Reps' }).click()
-    await page.getByRole('button', { name: 'Log set 2' }).click()
-    await page.getByRole('button', { name: /^Log set 3$/ }).waitFor()
+    await page.getByRole('button', { name: 'Log set 2 of 3' }).click()
     await page.getByRole('button', { name: 'Dismiss' }).click()
 
-    // Move to exercise 2 and log one set there.
+    // Leaving with sets logged but no feedback: the questions intercept.
     await page.getByRole('button', { name: 'Next ›' }).click()
+    await page.getByText('How was the pump?').waitFor()
+    await shot(page, 'feedback-pump')
+    await page.getByRole('button', { name: 'Moderate' }).click()
+    await page.getByText('Reps left in the tank').waitFor()
+    await shot(page, 'feedback-rir')
+    await page.getByRole('button', { name: '2', exact: true }).click()
+    await page.getByText('Any joint pain?').waitFor()
+    await shot(page, 'feedback-joint-pain')
+    await page.getByRole('button', { name: 'No', exact: true }).click()
     await page.getByText('Exercise 2 of 5').waitFor()
-    await typeIntoStepper(page, 'Weight', '200')
-    await page.getByRole('button', { name: 'Log set 1' }).click()
-    await page.getByRole('button', { name: /^Log set 2$/ }).waitFor()
+    check('feedback flow lands on exercise 2', true)
 
-    await page.screenshot({ path: resolve(OUT_DIR, 'resume-before-kill.png') })
-    const before = {
-      progress: await page.getByText('Exercise 2 of 5').count(),
-      loggedRow: await page.getByText('200 × 8').count(),
-    }
-    check('mid-session state reached: exercise 2, set 200 × 8 logged', before.progress === 1 && before.loggedRow === 1)
+    await typeIntoStepper(page, 'Weight', '200')
+    await page.getByRole('button', { name: 'Log set 1 of 3' }).click()
+    await page.getByRole('button', { name: 'Dismiss' }).click()
+    await shot(page, 'resume-before-kill')
 
     // The kill. No beforeunload, no cleanup, no chance to flush anything.
     await page.close({ runBeforeUnload: false })
     console.log('  → page killed')
 
     console.log('\nREOPEN — a fresh page against the same origin storage')
-    const revived = await openApp(context, url)
-
+    const revived = await openApp()
     const resumeButton = revived.getByRole('button', { name: 'Resume session' })
     check('home offers "Resume session"', (await resumeButton.count()) === 1)
-    await revived.screenshot({ path: resolve(OUT_DIR, 'resume-home.png') })
-
     await resumeButton.click()
     await revived.getByText(/Exercise \d of 5/).waitFor()
 
     check(
-      'resumes on exercise 2 — the one being trained when killed',
+      'resumes on exercise 2 — no re-asking the soreness questions',
       (await revived.getByText('Exercise 2 of 5').count()) === 1,
     )
     check(
-      'exercise 2’s set survived: 200 × 8 rendered from the database',
+      'exercise 2’s set survived: 200 × 8',
       (await revived.getByText('200 × 8').count()) === 1,
     )
     check(
-      'next set numbering continues: "Log set 2"',
-      (await revived.getByRole('button', { name: 'Log set 2' }).count()) === 1,
+      'set numbering continues: "Log set 2 of 3"',
+      (await revived.getByRole('button', { name: 'Log set 2 of 3' }).count()) === 1,
     )
 
-    // Walk back to exercise 1 and confirm both its sets are intact too.
     await revived.getByRole('button', { name: '‹ Previous' }).click()
     await revived.getByText('Exercise 1 of 5').waitFor()
     check(
@@ -158,26 +172,29 @@ async function main(): Promise<void> {
       (await revived.getByText('185 × 8').count()) === 1 &&
         (await revived.getByText('185 × 7').count()) === 1,
     )
-    await revived.screenshot({ path: resolve(OUT_DIR, 'resume-after-kill.png') })
+    await shot(revived, 'resume-after-kill')
 
-    console.log('\nCOMPLETE — drive the resumed session through cardio to done')
-    // Log one more set so the rest timer is on screen for its screenshot.
-    await revived.getByRole('button', { name: 'Log set 3' }).click()
-    await revived.getByRole('button', { name: 'Dismiss' }).waitFor()
-    await revived.screenshot({ path: resolve(OUT_DIR, 'session-rest-timer.png') })
+    // Exercise 1 already gave feedback — moving on must NOT re-ask.
+    await revived.getByRole('button', { name: 'Next ›' }).click()
+    await revived.getByText('Exercise 2 of 5').waitFor()
     check(
-      'rest timer appears on logging and shows the full countdown',
-      (await revived.getByText('2:30').count()) === 1,
+      'answered feedback is never re-asked',
+      (await revived.getByText('How was the pump?').count()) === 0,
     )
+
+    console.log('\nCOMPLETE — finish exercise 2; its last planned set asks by itself')
+    await revived.getByRole('button', { name: 'Log set 2 of 3' }).click()
     await revived.getByRole('button', { name: 'Dismiss' }).click()
-    check(
-      'rest timer dismisses with one tap',
-      (await revived.getByRole('button', { name: 'Dismiss' }).count()) === 0,
-    )
+    await revived.getByRole('button', { name: 'Log set 3 of 3' }).click()
+    await revived.getByText('How was the pump?').waitFor()
+    check('logging the last planned set triggers the questions automatically', true)
+    await revived.getByRole('button', { name: 'Great' }).click()
+    await revived.getByRole('button', { name: '2', exact: true }).click()
+    // The joint-pain question is dismissible — use the skip this time.
+    await revived.getByRole('button', { name: 'Skip' }).click()
+    await revived.getByRole('button', { name: 'Dismiss' }).click()
 
-    // Walk to the cardio step and finish: four Next taps to exercise 5, then
-    // the final button reads "Cardio ›".
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       await revived.getByRole('button', { name: /Next ›|Cardio ›/ }).click()
     }
     await revived.getByText('Incline walk').waitFor()
@@ -185,19 +202,19 @@ async function main(): Promise<void> {
       'cardio pre-filled with 45 min',
       (await revived.getByRole('button', { name: /^Duration: 45 min/ }).count()) === 1,
     )
-    await revived.screenshot({ path: resolve(OUT_DIR, 'session-cardio.png') })
+    await shot(revived, 'session-cardio')
 
     await revived.getByRole('button', { name: 'Finish session' }).click()
     await revived.getByText('Session complete').waitFor()
     check(
       'home shows the completed state with the set count',
-      (await revived.getByText(/4 sets/).count()) === 1,
+      (await revived.getByText(/5 sets/).count()) === 1,
     )
-    await revived.screenshot({ path: resolve(OUT_DIR, 'session-complete.png') })
+    await shot(revived, 'session-complete')
 
     console.log(
       failures === 0
-        ? '\nRESULT: a killed tab loses nothing — the session resumes exactly where it was.'
+        ? '\nRESULT: check-in, recommendations, feedback, kill, resume and completion all hold together.'
         : `\nRESULT: ${failures} check(s) FAILED.`,
     )
   } finally {

@@ -10,9 +10,19 @@
  */
 
 import { db } from './db'
-import type { CardioEntry, IsoDate, Session } from './schema'
+import type {
+  CardioEntry,
+  IsoDate,
+  Prescription,
+  Pump,
+  Rir,
+  Session,
+  Soreness,
+} from './schema'
 import { newId } from '../lib/ids'
 import { mesocyclePosition, templateForDate } from '../lib/schedule'
+import { recommend } from '../engine/recommend'
+import type { ExerciseHistoryInput } from '../engine/types'
 
 /** Builds the row for a new session on `date`, throwing on a rest day. */
 async function buildSession(
@@ -95,6 +105,9 @@ export interface SaveSetInput {
   setIndex: number
   weightLb: number
   reps: number
+  /** What the engine asked for, kept so History can compare plan to reality. */
+  prescribedWeightLb?: number | null
+  prescribedReps?: number | null
 }
 
 /**
@@ -135,8 +148,8 @@ export async function saveSet(input: SaveSetInput, now: Date = new Date()): Prom
         setIndex: input.setIndex,
         weightLb: input.weightLb,
         reps: input.reps,
-        prescribedWeightLb: null,
-        prescribedReps: null,
+        prescribedWeightLb: input.prescribedWeightLb ?? null,
+        prescribedReps: input.prescribedReps ?? null,
         loggedAt: timestamp,
         updatedAt: timestamp,
       })
@@ -178,6 +191,206 @@ export async function completeSession(
     })
     await db.settings.update('app', { lastCardio: cardio, updatedAt: timestamp })
   })
+}
+
+/** Records one soreness answer. Re-answering a group overwrites, not duplicates. */
+export async function saveSorenessFeedback(
+  sessionId: string,
+  muscleGroupId: string,
+  soreness: Soreness,
+  now: Date = new Date(),
+): Promise<void> {
+  const timestamp = now.getTime()
+  await db.transaction('rw', [db.sorenessFeedback], async () => {
+    const existing = await db.sorenessFeedback
+      .where('sessionId')
+      .equals(sessionId)
+      .filter((row) => row.muscleGroupId === muscleGroupId)
+      .first()
+
+    if (existing) {
+      await db.sorenessFeedback.update(existing.id, { soreness, updatedAt: timestamp })
+    } else {
+      await db.sorenessFeedback.add({
+        id: newId(),
+        sessionId,
+        muscleGroupId,
+        soreness,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+  })
+}
+
+export interface ExerciseFeedbackInput {
+  pump: Pump
+  rir: Rir
+  /** Null when the dismissible joint-pain question was skipped. */
+  jointPain: boolean | null
+}
+
+/** Records the pump/RIR/joint-pain answers for one exercise this session. */
+export async function saveExerciseFeedback(
+  sessionId: string,
+  exerciseId: string,
+  input: ExerciseFeedbackInput,
+  now: Date = new Date(),
+): Promise<void> {
+  const timestamp = now.getTime()
+  await db.transaction('rw', [db.exerciseFeedback], async () => {
+    const existing = await db.exerciseFeedback
+      .where('[sessionId+exerciseId]')
+      .equals([sessionId, exerciseId])
+      .first()
+
+    if (existing) {
+      await db.exerciseFeedback.update(existing.id, { ...input, updatedAt: timestamp })
+    } else {
+      await db.exerciseFeedback.add({
+        id: newId(),
+        sessionId,
+        exerciseId,
+        ...input,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+  })
+}
+
+/**
+ * Runs the engine for every exercise in the session and stores the results —
+ * the numbers *and* the sentence, so what the user was told is part of the
+ * record (BRIEF Part 5).
+ *
+ * Called once the soreness prompts are answered, since the set matrix needs
+ * today's soreness crossed with last session's pump. Idempotent: once a
+ * session has prescriptions they are never regenerated, so a mid-session
+ * reload cannot change the day's plan under the user's feet.
+ */
+export async function generatePrescriptions(
+  sessionId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  const timestamp = now.getTime()
+
+  await db.transaction(
+    'rw',
+    [
+      db.sessions,
+      db.dayTemplates,
+      db.exercises,
+      db.muscleGroups,
+      db.sets,
+      db.exerciseFeedback,
+      db.sorenessFeedback,
+      db.prescriptions,
+    ],
+    async () => {
+      if (await db.prescriptions.where('sessionId').equals(sessionId).first()) return
+
+      const session = await db.sessions.get(sessionId)
+      if (!session) throw new Error('Cannot prescribe for a session that does not exist')
+      const template = await db.dayTemplates.get(session.dayTemplateId)
+      if (!template) return
+
+      // Today's soreness answers, resolved per muscle group with inheritance:
+      // a group not prompted for borrows its parent's answer (PLAN §2.3).
+      const sorenessByGroup = new Map<string, Soreness>()
+      for (const row of await db.sorenessFeedback
+        .where('sessionId')
+        .equals(sessionId)
+        .toArray()) {
+        sorenessByGroup.set(row.muscleGroupId, row.soreness)
+      }
+      const groups = await db.muscleGroups.toArray()
+      const inheritsFrom = new Map(groups.map((g) => [g.id, g.inheritsFromId]))
+
+      function sorenessFor(muscleGroupId: string): Soreness | null {
+        const direct = sorenessByGroup.get(muscleGroupId)
+        if (direct) return direct
+        const parent = inheritsFrom.get(muscleGroupId)
+        return parent ? (sorenessByGroup.get(parent) ?? null) : null
+      }
+
+      const rows: Prescription[] = []
+
+      for (const exerciseId of template.exerciseIds) {
+        const exercise = await db.exercises.get(exerciseId)
+        if (!exercise) continue
+
+        // Last time this exercise was performed in a completed session, with
+        // the feedback given that day and what the engine did to the load.
+        // (Inlined rather than shared with queries.ts because everything here
+        // must read inside this transaction.)
+        const completed = (
+          await db.sessions.where('status').equals('completed').toArray()
+        )
+          .filter((s) => s.id !== sessionId)
+          .sort((a, b) => b.date.localeCompare(a.date))
+
+        let last: ExerciseHistoryInput['last'] = null
+        for (const candidate of completed) {
+          const sets = await db.sets
+            .where('[sessionId+exerciseId]')
+            .equals([candidate.id, exerciseId])
+            .sortBy('setIndex')
+          if (sets.length === 0) continue
+
+          const feedback = await db.exerciseFeedback
+            .where('[sessionId+exerciseId]')
+            .equals([candidate.id, exerciseId])
+            .first()
+          const prescription = await db.prescriptions
+            .where('sessionId')
+            .equals(candidate.id)
+            .filter((row) => row.exerciseId === exerciseId)
+            .first()
+
+          last = {
+            sets: sets.map((set) => ({ weightLb: set.weightLb, reps: set.reps })),
+            pump: feedback?.pump ?? null,
+            rir: feedback?.rir ?? null,
+            jointPain: feedback?.jointPain ?? null,
+            loadAction: prescription?.loadAction ?? null,
+          }
+          break
+        }
+
+        const recommendation = recommend({
+          exercise: {
+            repTargetMin: exercise.repTargetMin,
+            repTargetMax: exercise.repTargetMax,
+            weightIncrementLb: exercise.weightIncrementLb,
+          },
+          soreness: sorenessFor(exercise.muscleGroupId),
+          last,
+          isDeload: session.isDeload,
+        })
+
+        rows.push({
+          id: newId(),
+          mesocycleId: session.mesocycleId,
+          sessionId,
+          exerciseId,
+          weekNumber: session.weekNumber,
+          plannedSets: recommendation.sets,
+          plannedWeightLb: recommendation.weightLb,
+          repTargetMin: recommendation.repTargetMin,
+          repTargetMax: recommendation.repTargetMax,
+          minRepsToBeat: recommendation.repsToBeat,
+          targetRir: recommendation.targetRir,
+          loadAction: recommendation.loadAction,
+          sentence: recommendation.sentence,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+      }
+
+      await db.prescriptions.bulkAdd(rows)
+    },
+  )
 }
 
 /**
