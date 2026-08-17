@@ -18,14 +18,10 @@ export type IsoDate = string
 export type ExerciseType = 'compound' | 'isolation'
 export type DayLetter = 'A' | 'B' | 'C'
 
-/** Answers to the three feedback prompts (BRIEF.md Part 5). */
-export type Soreness = 'none' | 'a_little' | 'still_sore'
-export type Pump = 'low' | 'moderate' | 'great'
-/** Reps left in the tank on the final set. */
-export type Rir = '3+' | '2' | '1' | '0'
-
-/** What the engine did to the load, used to enforce the no-two-in-a-row rule. */
-export type LoadAction = 'increase' | 'hold' | 'decrease'
+// The feedback vocabulary is owned by the engine — the dependency-free tested
+// core — and re-exported here so persistence and progression can never drift.
+export type { LoadAction, Pump, Rir, Soreness } from '../engine/types'
+import type { LoadAction, Pump, Rir, Soreness } from '../engine/types'
 
 export type SessionStatus = 'in_progress' | 'completed' | 'skipped'
 
