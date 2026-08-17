@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react'
 
+import { Suspense, lazy } from 'react'
+
 import { HomeScreen } from './features/home/HomeScreen'
 import { SessionScreen } from './features/session/SessionScreen'
+
+// Charts are the one heavy dependency, and the brief's cold-open budget is
+// three seconds to the first logged set — so Recharts only downloads when the
+// history screen is actually opened, never on the way to a workout.
+const HistoryScreen = lazy(() =>
+  import('./features/history/HistoryScreen').then((module) => ({
+    default: module.HistoryScreen,
+  })),
+)
 import { seedIfEmpty } from './db/seed'
 import { useRoute } from './lib/router'
 
@@ -37,5 +48,13 @@ export function App() {
 
   if (!ready) return <div className="min-h-dvh bg-bg" />
 
-  return route === '/session' ? <SessionScreen /> : <HomeScreen />
+  return route === '/session' ? (
+    <SessionScreen />
+  ) : route === '/history' ? (
+    <Suspense fallback={<div className="min-h-dvh bg-bg" />}>
+      <HistoryScreen />
+    </Suspense>
+  ) : (
+    <HomeScreen />
+  )
 }

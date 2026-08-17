@@ -315,6 +315,94 @@ async function assembleSessionView(session: Session): Promise<SessionView | null
   }
 }
 
+/** One completed session's numbers for an exercise, charted over time. */
+export interface HistoryPoint {
+  date: IsoDate
+  /** Heaviest weight lifted that day. */
+  topWeightLb: number
+  /** Σ weight × reps across the day's sets. */
+  volumeLb: number
+  setCount: number
+  isDeload: boolean
+}
+
+export interface HistoryExerciseOption {
+  id: string
+  name: string
+}
+
+export interface HistoryView {
+  /** Exercises with at least one completed session, in program order. */
+  exercises: HistoryExerciseOption[]
+  /** Points for the requested exercise, oldest first. Empty when none. */
+  points: HistoryPoint[]
+}
+
+/**
+ * Everything the history screen needs. Reads are batched for live-query
+ * reactivity — same load-bearing shape as assembleSessionView above.
+ */
+export async function getHistoryView(exerciseId: string | null): Promise<HistoryView> {
+  const [completed, templates, allExercises, allSets] = await Promise.all([
+    db.sessions.where('status').equals('completed').toArray(),
+    db.dayTemplates.toArray(),
+    db.exercises.toArray(),
+    db.sets.toArray(),
+  ])
+
+  const completedById = new Map(completed.map((session) => [session.id, session]))
+  const exerciseSets = exerciseId
+    ? allSets.filter((set) => set.exerciseId === exerciseId)
+    : []
+
+  // Which exercises have history: those with sets in a completed session.
+  const withData = new Set(
+    allSets
+      .filter((set) => completedById.has(set.sessionId))
+      .map((set) => set.exerciseId),
+  )
+
+  // Program order: Day A, B, C templates first, then anything else by name.
+  const ordered: string[] = []
+  for (const template of templates.sort((a, b) => a.letter.localeCompare(b.letter))) {
+    for (const id of template.exerciseIds) {
+      if (!ordered.includes(id)) ordered.push(id)
+    }
+  }
+  const nameById = new Map(allExercises.map((exercise) => [exercise.id, exercise.name]))
+  const exercises: HistoryExerciseOption[] = [
+    ...ordered,
+    ...allExercises.map((e) => e.id).filter((id) => !ordered.includes(id)),
+  ]
+    .filter((id) => withData.has(id) && nameById.has(id))
+    .map((id) => ({ id, name: nameById.get(id) ?? '' }))
+
+  // The chart points for the selected exercise.
+  const bySession = new Map<string, typeof exerciseSets>()
+  for (const set of exerciseSets) {
+    if (!completedById.has(set.sessionId)) continue
+    const bucket = bySession.get(set.sessionId)
+    if (bucket) bucket.push(set)
+    else bySession.set(set.sessionId, [set])
+  }
+
+  const points: HistoryPoint[] = [...bySession.entries()]
+    .map(([sessionId, sets]) => {
+      const session = completedById.get(sessionId)
+      if (!session) throw new Error('unreachable: filtered above')
+      return {
+        date: session.date,
+        topWeightLb: Math.max(...sets.map((set) => set.weightLb)),
+        volumeLb: sets.reduce((sum, set) => sum + set.weightLb * set.reps, 0),
+        setCount: sets.length,
+        isDeload: session.isDeload,
+      }
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  return { exercises, points }
+}
+
 export async function getTodayView(date: IsoDate): Promise<TodayView> {
   const [templates, mesocycle, session, sessions, settings] = await Promise.all([
     getDayTemplates(),

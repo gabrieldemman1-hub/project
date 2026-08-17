@@ -386,15 +386,24 @@ function Header({
 function Streak({ streak }: { streak: number }) {
   return (
     <div className="mt-10">
-      <p className="text-xs tracking-wider text-text-secondary uppercase">
-        {streak === 0 ? (
-          'No streak yet'
-        ) : (
-          <>
-            <span className="num text-text">{streak}</span> day streak
-          </>
-        )}
-      </p>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs tracking-wider text-text-secondary uppercase">
+          {streak === 0 ? (
+            'No streak yet'
+          ) : (
+            <>
+              <span className="num text-text">{streak}</span> day streak
+            </>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/history')}
+          className="min-h-touch-min shrink-0 rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
+        >
+          History ›
+        </button>
+      </div>
       <p className="mt-2 text-micro tracking-wider text-text-muted uppercase">
         {APP_VERSION}
       </p>
