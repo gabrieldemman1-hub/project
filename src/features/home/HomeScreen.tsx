@@ -9,6 +9,7 @@ import { skipToday, startSession, undoSkip } from '../../db/mutations'
 import { formatLongDate } from '../../lib/date'
 import { navigate } from '../../lib/router'
 import { useToday } from '../../lib/useToday'
+import { APP_VERSION } from '../../lib/version'
 
 /**
  * Home / Today (BRIEF.md Part 6).
@@ -224,14 +225,19 @@ function Header({
 
 function Streak({ streak }: { streak: number }) {
   return (
-    <p className="mt-10 text-xs tracking-wider text-text-secondary uppercase">
-      {streak === 0 ? (
-        'No streak yet'
-      ) : (
-        <>
-          <span className="num text-text">{streak}</span> day streak
-        </>
-      )}
-    </p>
+    <div className="mt-10">
+      <p className="text-xs tracking-wider text-text-secondary uppercase">
+        {streak === 0 ? (
+          'No streak yet'
+        ) : (
+          <>
+            <span className="num text-text">{streak}</span> day streak
+          </>
+        )}
+      </p>
+      <p className="mt-2 text-micro tracking-wider text-text-muted uppercase">
+        {APP_VERSION}
+      </p>
+    </div>
   )
 }
