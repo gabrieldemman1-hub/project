@@ -47,9 +47,9 @@
   --spacing-control: 64px;
 
   /* container */
-  --container-tight: 24ch;
-  --container-base: 30ch;
-  --container-wide: 38ch;
+  --container-measure-tight: 24ch;
+  --container-measure-base: 30ch;
+  --container-measure-wide: 38ch;
 
   /* radius */
   --radius-sm: 8px;

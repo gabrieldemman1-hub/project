@@ -81,9 +81,11 @@ export const space = {
  * reads well if the line length is capped.
  */
 export const measure = {
-  tight: '24ch',
-  base: '30ch',
-  wide: '38ch',
+  // Keys carry the `measure` prefix so the generated utilities read as
+  // `max-w-measure-base` rather than the ambiguous `max-w-base`.
+  measureTight: '24ch',
+  measureBase: '30ch',
+  measureWide: '38ch',
 } as const
 
 export const radius = {
