@@ -22,7 +22,7 @@ import {
   templateForDate,
   type MesocyclePosition,
 } from '../lib/schedule'
-import { WEEKDAY_NAMES, addDays, startOfWeek, weekdayOf } from '../lib/date'
+import { WEEKDAY_NAMES, addDays, daysBetween, startOfWeek, toIsoDate, weekdayOf } from '../lib/date'
 import { DEFAULT_CARDIO } from './seed'
 
 export async function getSettings(): Promise<AppSettings | undefined> {
@@ -371,6 +371,12 @@ export interface DashboardView {
   weekTotals: WeekTotals
   /** Every week of the live block, for the progress strip. */
   blockWeeks: Array<{ week: number; isDeload: boolean; state: 'past' | 'current' | 'future' }>
+  /**
+   * Days since the last JSON export once that exceeds 30 — the third of PLAN
+   * §2.2's defences against browser storage being the only copy. Null while
+   * a backup is recent (or the install is younger than 30 days).
+   */
+  backupOverdueDays: number | null
 }
 
 export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
@@ -481,6 +487,14 @@ export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
     })
   }
 
+  // Anchored to the last export, or to the install for a phone that has
+  // never exported — day one of real use starts the same 30-day clock.
+  const backupAnchor = settings?.lastBackupAt ?? settings?.seededAt
+  const daysSinceBackup =
+    backupAnchor === undefined
+      ? 0
+      : daysBetween(toIsoDate(new Date(backupAnchor)), date)
+
   const currentWeek = position?.weekNumber ?? 1
   const blockWeeks = active
     ? Array.from({ length: active.totalWeeks }, (_, index) => {
@@ -519,6 +533,7 @@ export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
     week,
     weekTotals: { sessions: weekSessions, sets: weekSets, volumeLb: weekVolume },
     blockWeeks,
+    backupOverdueDays: daysSinceBackup > 30 ? daysSinceBackup : null,
   }
 }
 

@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 import { tokensCssPlugin } from './scripts/generate-tokens-css.ts'
+import { serviceWorkerPlugin } from './scripts/generate-service-worker.ts'
 
 export default defineConfig({
   /*
@@ -15,7 +16,7 @@ export default defineConfig({
    */
   base: process.env['VITE_BASE_PATH'] ?? '/',
   // tokensCssPlugin runs first so Tailwind always compiles against fresh tokens.
-  plugins: [tokensCssPlugin(), tailwindcss(), react()],
+  plugins: [tokensCssPlugin(), tailwindcss(), react(), serviceWorkerPlugin()],
   server: {
     host: true,
   },

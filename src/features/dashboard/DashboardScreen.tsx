@@ -96,6 +96,10 @@ export function DashboardScreen() {
         <BlockStrip weeks={view.blockWeeks} />
       ) : null}
 
+      {view.backupOverdueDays !== null ? (
+        <BackupNudge days={view.backupOverdueDays} />
+      ) : null}
+
       {view.savedBlocks.length > 0 ? (
         <section className="mt-8">
           <h2 className="text-xs tracking-wider text-text-secondary uppercase">
@@ -368,6 +372,30 @@ function BlockStrip({ weeks }: { weeks: DashboardView['blockWeeks'] }) {
         ))}
       </ul>
     </section>
+  )
+}
+
+/**
+ * The 30-day export reminder (PLAN §2.2): with no cloud copy, browser storage
+ * is the only copy, so going quiet about backups is how a lost phone becomes
+ * a lost history. Quiet by design — a bordered note, not an alarm — and one
+ * tap from the fix.
+ */
+function BackupNudge({ days }: { days: number }) {
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/settings')}
+      className="mt-8 flex min-h-touch-min w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-3 text-left"
+    >
+      <span className="text-sm text-text-secondary">
+        No backup in <span className="num text-text">{days}</span> days — this
+        phone holds the only copy.
+      </span>
+      <span className="shrink-0 text-xs tracking-wider text-text-secondary uppercase">
+        Export ›
+      </span>
+    </button>
   )
 }
 

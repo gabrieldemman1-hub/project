@@ -218,5 +218,10 @@ export interface AppSettings {
   defaultRestIsolationSeconds: number
   /** Set by the seed so we can tell a fresh install from an upgraded one. */
   seededAt: Timestamp
+  /**
+   * When the last JSON export was taken. Absent until the first one — the
+   * dashboard's backup nudge anchors to `seededAt` in that case.
+   */
+  lastBackupAt?: Timestamp
   updatedAt: Timestamp
 }

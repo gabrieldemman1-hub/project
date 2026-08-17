@@ -15,7 +15,9 @@
     "walkthrough": "tsx scripts/walkthrough.ts",
     "shoot-history": "tsx scripts/shoot-history.ts",
     "prove-settings": "tsx scripts/prove-settings.ts",
-    "prove-dashboard": "tsx scripts/prove-dashboard.ts"
+    "prove-dashboard": "tsx scripts/prove-dashboard.ts",
+    "prove-offline": "tsx scripts/prove-offline.ts",
+    "make-pwa-assets": "tsx scripts/generate-pwa-assets.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

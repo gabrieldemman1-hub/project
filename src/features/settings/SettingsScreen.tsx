@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 
 import { Button } from '../../components/Button'
 import { Screen } from '../../components/Screen'
+import {
+  exportBackup,
+  importBackup,
+  summarizeBackup,
+  validateBackup,
+  type BackupSummary,
+  type BackupFile,
+} from '../../db/backup'
 import {
   addExerciseToDay,
   addExerciseToLibrary,
@@ -16,15 +24,14 @@ import {
 import { getSettingsView, type SettingsView } from '../../db/queries'
 import type { DayTemplate, Theme } from '../../db/schema'
 import { createLock, isValidPin, verifyPin } from '../../lib/pin'
-import { formatLongDate } from '../../lib/date'
+import { formatLongDate, toIsoDate } from '../../lib/date'
 import { navigate } from '../../lib/router'
 import { APP_VERSION } from '../../lib/version'
 
 /**
- * Settings (BRIEF Part 6, arriving early at the owner's request): edit each
- * day's exercise list, grow the library, see every saved block, switch
- * theme, and manage the on-device PIN lock. Export/import lands with the
- * rest of Phase 7.
+ * Settings (BRIEF Part 6): edit each day's exercise list, grow the library,
+ * see every saved block, export and restore the full training history,
+ * switch theme, and manage the on-device PIN lock.
  */
 export function SettingsScreen() {
   const view = useLiveQuery(() => getSettingsView(), [])
@@ -53,6 +60,10 @@ export function SettingsScreen() {
 
       <Section title="Blocks">
         <BlocksList view={view} />
+      </Section>
+
+      <Section title="Backup">
+        <BackupManager view={view} />
       </Section>
 
       <Section title="Appearance">
@@ -307,6 +318,188 @@ function BlocksList({ view }: { view: SettingsView }) {
       )}
     </>
   )
+}
+
+/**
+ * Export and restore (BRIEF Phase 7, PLAN §2.2). With no server and no sync,
+ * the exported file is the only copy of this history that survives a lost
+ * phone — so exporting is one tap, prefers the share sheet on a phone (into
+ * Files, iCloud, AirDrop), and restoring demands an explicit confirmation
+ * because it replaces everything.
+ */
+function BackupManager({ view }: { view: SettingsView }) {
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [pending, setPending] = useState<{ file: BackupFile; summary: BackupSummary } | null>(null)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [persisted, setPersisted] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    // Whether the browser has promised not to evict this app's storage —
+    // worth a word here because on iOS it is the difference between "safe
+    // once installed" and "export regularly".
+    void navigator.storage?.persisted?.().then(setPersisted, () => {})
+  }, [])
+
+  const lastBackupAt = view.settings?.lastBackupAt
+
+  async function doExport() {
+    setError('')
+    setMessage('')
+    try {
+      const backup = await exportBackup()
+      const json = JSON.stringify(backup, null, 2)
+      const name = `workout-backup-${toIsoDate(new Date(backup.exportedAt))}.json`
+      const file = new File([json], name, { type: 'application/json' })
+
+      // The share sheet is the path that actually works one-handed on an
+      // installed iOS app — straight into Files or iCloud. The anchor
+      // download is the desktop fallback.
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] })
+        } catch (cause) {
+          // Cancelling the share sheet is not an error; the export (and its
+          // lastBackupAt stamp) already happened.
+          if (cause instanceof Error && cause.name === 'AbortError') return
+          throw cause
+        }
+      } else {
+        const url = URL.createObjectURL(file)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = name
+        anchor.click()
+        URL.revokeObjectURL(url)
+      }
+      setMessage('Backup exported. Keep it somewhere that is not this phone.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  async function pickFile(files: FileList | null) {
+    setError('')
+    setMessage('')
+    setPending(null)
+    const picked = files?.[0]
+    if (!picked) return
+    try {
+      const file = validateBackup(JSON.parse(await picked.text()))
+      setPending({ file, summary: summarizeBackup(file) })
+    } catch (cause) {
+      setError(
+        cause instanceof SyntaxError
+          ? 'This file is not a backup — it could not be read.'
+          : cause instanceof Error
+            ? cause.message
+            : String(cause),
+      )
+    }
+  }
+
+  async function confirmImport() {
+    if (!pending) return
+    setError('')
+    try {
+      const summary = await importBackup(pending.file)
+      setPending(null)
+      setMessage(
+        `Restored: ${count(summary.sessions, 'session')}, ${count(summary.sets, 'set')} across ${count(summary.mesocycles, 'block')}.`,
+      )
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-surface px-4 py-4">
+      <p className="max-w-measure-wide text-sm leading-relaxed text-text-secondary">
+        Everything lives on this phone only. An exported file is the one copy
+        that survives losing it — export after big weeks, keep the file off
+        this phone.
+      </p>
+
+      <p className="mt-3 text-xs text-text-secondary">
+        {lastBackupAt === undefined ? (
+          'Never backed up'
+        ) : (
+          <>Last backup: {formatLongDate(toIsoDate(new Date(lastBackupAt)))}</>
+        )}
+        {persisted !== null && (
+          <span className="text-text-muted">
+            {' '}
+            · storage {persisted ? 'protected from cleanup' : 'not yet protected — install to home screen'}
+          </span>
+        )}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => void doExport()}
+        className="mt-3 min-h-touch-min w-full rounded-md border border-border-strong bg-surface-raised text-sm font-medium text-text"
+      >
+        Export backup
+      </button>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/json,.json"
+        aria-label="Choose a backup file to restore"
+        className="hidden"
+        onChange={(event) => {
+          void pickFile(event.target.files)
+          // Same file picked twice must fire change twice.
+          event.target.value = ''
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => fileInput.current?.click()}
+        className="mt-2 min-h-touch-min w-full rounded-md border border-border bg-surface-raised text-sm text-text-secondary"
+      >
+        Restore from a backup file…
+      </button>
+
+      {pending ? (
+        <div className="mt-3 rounded-md border border-alert bg-alert-surface px-3 py-3">
+          <p className="text-sm leading-relaxed text-text">
+            Replace everything on this phone with this backup? It holds{' '}
+            <span className="num">{pending.summary.sessions}</span>{' '}
+            {pending.summary.sessions === 1 ? 'session' : 'sessions'} and{' '}
+            <span className="num">{pending.summary.sets}</span>{' '}
+            {pending.summary.sets === 1 ? 'set' : 'sets'}, exported{' '}
+            {formatLongDate(toIsoDate(new Date(pending.summary.exportedAt)))}.
+            What is on this phone now will be gone.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void confirmImport()}
+              className="min-h-touch-min flex-1 rounded-md border border-alert bg-surface text-sm font-medium text-alert"
+            >
+              Replace everything
+            </button>
+            <button
+              type="button"
+              onClick={() => setPending(null)}
+              className="min-h-touch-min rounded-md border border-border bg-surface px-4 text-sm text-text-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {message ? <p className="mt-2 text-xs text-text-secondary">{message}</p> : null}
+      {error ? <p className="mt-2 text-xs text-alert">{error}</p> : null}
+    </div>
+  )
+}
+
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`
 }
 
 function ThemeToggle({ current }: { current: Theme }) {

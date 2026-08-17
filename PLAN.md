@@ -277,7 +277,7 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 | 4 — Engine wired in | ✅ Complete — prompts, prescriptions, sentences live; walkthrough + browser proof passing |
 | 5 — Mesocycle and deload | ✅ Complete — six-week simulation gate passing |
 | 6 — History | ✅ Complete — three charts, screenshot gate with realistic data |
-| 7 — PWA and backup | ⬜ Not started |
+| 7 — PWA and backup | ✅ Complete — installable, fully offline, export/import proven end to end in a real browser |
 | 8 — Polish | ⬜ Not started |
 
 ### Modified files
@@ -436,6 +436,28 @@ scripts/prove-dashboard.ts the gate: states, totals, tap-through, deep link
 screenshots/dashboard-board.png · dashboard-day-peek.png
 ```
 
+**Phase 7:**
+```
+public/manifest.webmanifest      generated from tokens — name, colours, icons
+public/icons/*.png               192/512/maskable/apple-touch, rendered from
+                                 tokens by scripts/generate-pwa-assets.ts
+scripts/generate-pwa-assets.ts   npm run make-pwa-assets (rerun on redesign)
+scripts/generate-service-worker.ts  Vite plugin: writes dist/sw.js per build
+                                 with the full precache list + content hash
+index.html                       manifest + icon links, relative for any base
+src/main.tsx                     SW registration (prod only) + storage.persist()
+src/db/schema.ts                 + AppSettings.lastBackupAt
+src/db/backup.ts                 export snapshot / validate / import-replace,
+                                 both directions transactional
+src/db/queries.ts                + backupOverdueDays on DashboardView
+src/features/settings/SettingsScreen.tsx  Backup section: export (share sheet
+                                 first, download fallback), confirmed restore
+src/features/dashboard/DashboardScreen.tsx  30-day backup nudge
+src/db/backup.test.ts            round trip, rejection, nudge — 11 tests
+scripts/prove-offline.ts         the gate: airplane mode + backup round trip
+screenshots/offline-dashboard.png · restore-confirm.png
+```
+
 ### Phase 5+6 notes
 
 - Deload sessions are invisible to progression, to the greyed targets, and
@@ -501,6 +523,45 @@ joint-pain flag moved to a deeper, duller red and those flags always carry a
 word as well as a colour. The light theme carries the same identity one step
 deeper for contrast on white. Recorded here rather than silently contradicting
 the brief.
+
+### Phase 7 notes — PWA and backup
+
+The data-safety phase, closing out §2.2's three mitigations:
+
+- **Installable.** A generated manifest (standalone, portrait, colours from
+  tokens) and four icons — a glowing red barbell on the app's near-black,
+  rendered from an SVG in Chromium so even the icon obeys tokens.ts. All URLs
+  are relative, so one manifest serves both `/` locally and `/project/` on
+  Pages.
+- **Fully offline.** A hand-rolled service worker (~60 lines, no Workbox — a
+  fully precached static app needs none of its machinery) written by a build
+  plugin that enumerates every built file into the precache list with a
+  content-hash cache name. Cache-first for everything, app shell for
+  navigations. Deliberately no `skipWaiting`: a new version takes over on the
+  next full open, never mid-workout, so lazy chunks are never swapped out
+  from under a live session. `navigator.storage.persist()` is requested on
+  every launch (§2.2 mitigation 1) and Settings reports whether the browser
+  granted it.
+- **Backup.** Export takes a full-snapshot JSON inside one transaction and
+  stamps `lastBackupAt` inside the same transaction, so the file and the
+  database agree; on a phone it goes out through the share sheet (Files,
+  iCloud, AirDrop), with an anchor download as the desktop fallback. Restore
+  validates the entire file first with plain-English rejections, shows what
+  it holds, demands an explicit "Replace everything", and then swaps the
+  whole database in one transaction — all-or-nothing, no merge by design
+  (two histories woven together would be trained on). The dashboard nudges
+  when no export has happened for 30 days (§2.2 mitigation 3), anchored to
+  install for a phone that has never exported.
+
+**The gate** (`npm run prove-offline`, 15 checks): worker installed and
+controlling, manifest and icons served, then the network is cut — the app
+reloads, the board renders, History's lazy chart chunk and Settings both
+open, a day is logged, a backup is exported and verified to hold it, the
+database is deleted outright, the app reseeds (still offline), the backup is
+restored through the confirm flow and the logged day returns, and a junk
+JSON file is rejected without touching anything. Plus 183 unit tests (11 new),
+the production build, all four prior browser proofs, and the 16/16 device
+sweep.
 
 ### Interlude: the dashboard board (owner request — "more of a dashboard")
 
