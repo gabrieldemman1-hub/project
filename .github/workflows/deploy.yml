@@ -3,6 +3,14 @@ name: Deploy to GitHub Pages
 # Publishes the app after every push, so the phone always has the latest phase.
 # The tests and the production build both have to pass first — a red build
 # never reaches the phone.
+#
+# Deployment works by force-pushing the built site to the gh-pages branch.
+# This route was chosen deliberately: GitHub enables the Pages site
+# automatically when a gh-pages branch exists, whereas the Actions-native
+# deployment (configure-pages/deploy-pages) requires the site to be switched
+# on by hand in repository settings first — creating it needs admin rights
+# that GITHUB_TOKEN is refused even with pages:write ("Resource not
+# accessible by integration"). The branch route has no manual step at all.
 
 on:
   push:
@@ -10,9 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # Never let two deploys race; the newest push wins.
 concurrency:
@@ -20,7 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     env:
       # @playwright/test is only used by the screenshot script, which does not
@@ -45,27 +51,19 @@ jobs:
           # Must match the repository name — GitHub Pages serves from /<repo>/.
           VITE_BASE_PATH: /project/
 
-      # Pages has to be switched on once by hand:
-      #   Settings → Pages → Build and deployment → Source: GitHub Actions
-      # This step fails with "Get Pages site failed" until that is done.
-      #
-      # `enablement: true` looks like it would automate this, but it does not:
-      # creating a Pages site needs admin rights, and GITHUB_TOKEN is refused
-      # with "Resource not accessible by integration" even with pages:write.
-      # Automating it would need a personal access token, which is a worse
-      # trade than one click.
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Push to gh-pages
+        run: |
+          cd dist
+          # Stops GitHub running the site through Jekyll, which would drop
+          # files and slow the publish down.
+          touch .nojekyll
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Deploy site from ${GITHUB_SHA}"
+          git push --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
