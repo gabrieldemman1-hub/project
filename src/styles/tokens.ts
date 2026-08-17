@@ -25,19 +25,32 @@ export const colors = {
   /** Slightly brighter edge for the element holding focus. */
   borderStrong: '#33333A',
 
-  /** The only accent: cool white with a faint blue cast. */
-  accent: '#EEF3FF',
-  /** Primary reading text. */
-  text: '#EEF3FF',
+  /**
+   * The accent. Vivid red, per the product owner's design direction — this
+   * deliberately supersedes BRIEF Part 7's cool-white accent (recorded in
+   * PLAN.md). Everything else about Part 7 stands: layered near-black, one
+   * accent only, glow on at most two elements per screen.
+   */
+  accent: '#F0323C',
+  /** Chip/segment fill for an unselected option in the accent family. */
+  accentSurface: '#2C1216',
+  /** Its edge — visible on near-black without competing with a live accent. */
+  accentBorder: '#6E2028',
+  /** Primary reading text stays near-white: red is for accent, not prose. */
+  text: '#F2F3F5',
   /** Labels and secondary copy. */
   textSecondary: '#8A8A93',
   /** Last session's greyed-out numbers — the target to beat. */
   textMuted: '#56565E',
   /** Text placed on top of an accent-filled surface. */
-  onAccent: '#0A0A0B',
+  onAccent: '#FFFFFF',
 
-  /** Muted red. Reserved exclusively for "still sore" and joint-pain flags. */
-  alert: '#C25A50',
+  /**
+   * Soreness and joint-pain flags. Now that the accent is itself red, this is
+   * a deeper, duller red so a warning never reads as a live control; those
+   * flags always carry a word as well as a colour.
+   */
+  alert: '#B3403A',
   /** Dimmed alert, for the tint behind a flagged row. */
   alertSurface: '#2A1614',
 } as const
@@ -55,11 +68,14 @@ export const lightColors: Record<keyof typeof colors, string> = {
   surfaceRaised: '#ECEEF3',
   border: '#DCDFE6',
   borderStrong: '#B9BEC9',
-  accent: '#14161C',
+  // The same red identity, one step deeper so it holds contrast on white.
+  accent: '#D2202B',
+  accentSurface: '#FCE9EA',
+  accentBorder: '#F0B3B7',
   text: '#14161C',
   textSecondary: '#5A5E68',
   textMuted: '#9AA0AB',
-  onAccent: '#F7F9FF',
+  onAccent: '#FFFFFF',
   alert: '#B4453B',
   alertSurface: '#F6DEDA',
 } as const
@@ -70,14 +86,14 @@ export const lightColors: Record<keyof typeof colors, string> = {
  */
 export const glow = {
   /** Resting state of an interactive element. */
-  soft: '0 0 0 1px rgba(238,243,255,0.10), 0 0 24px -6px rgba(238,243,255,0.22)',
+  soft: '0 0 0 1px rgba(240,50,60,0.16), 0 0 24px -6px rgba(240,50,60,0.30)',
   /** The one primary action, or the active set row. */
   strong:
-    '0 0 0 1px rgba(238,243,255,0.22), 0 0 40px -8px rgba(238,243,255,0.42), 0 0 80px -20px rgba(238,243,255,0.30)',
+    '0 0 0 1px rgba(240,50,60,0.30), 0 0 40px -8px rgba(240,50,60,0.55), 0 0 80px -20px rgba(240,50,60,0.40)',
   /** Rest-timer ring and other live elements. */
-  ring: '0 0 32px -4px rgba(238,243,255,0.35)',
+  ring: '0 0 32px -4px rgba(240,50,60,0.45)',
   /** Joint pain / still sore only. */
-  alert: '0 0 0 1px rgba(194,90,80,0.30), 0 0 28px -8px rgba(194,90,80,0.35)',
+  alert: '0 0 0 1px rgba(179,64,58,0.35), 0 0 28px -8px rgba(179,64,58,0.40)',
   none: 'none',
 } as const
 

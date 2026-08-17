@@ -294,6 +294,123 @@ async function assembleSessionView(session: Session): Promise<SessionView | null
   }
 }
 
+/**
+ * The dashboard's model: which block is live, what it says today, and the
+ * saved blocks behind it. One batched read, live-query safe.
+ */
+export interface DashboardBlock {
+  id: string
+  startDate: IsoDate
+  status: 'active' | 'completed'
+  sessionCount: number
+  /** 1–6 for the live block; null for a finished one. */
+  weekNumber: number | null
+  totalWeeks: number
+  isDeloadWeek: boolean
+  /** True when the block has run past its final week and awaits a restart. */
+  isComplete: boolean
+}
+
+export type TodayState =
+  | 'rest'
+  | 'ready'
+  | 'in_progress'
+  | 'completed'
+  | 'skipped'
+  | 'block_complete'
+  | 'finish_previous'
+
+export interface DashboardView {
+  date: IsoDate
+  /** Null on a rest day. */
+  dayLetter: string | null
+  dayName: string | null
+  exerciseCount: number
+  state: TodayState
+  setsLoggedToday: number
+  streak: number
+  /** The live block, or null before the first one exists. */
+  activeBlock: DashboardBlock | null
+  /** Finished blocks, newest first. */
+  savedBlocks: DashboardBlock[]
+  /** Tomorrow's day letter, so a rest day can say what's coming. */
+  nextDayLetter: string | null
+  nextDayName: string | null
+}
+
+export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
+  const [templates, mesocycles, sessions, settings, allSets] = await Promise.all([
+    db.dayTemplates.toArray(),
+    db.mesocycles.toArray(),
+    db.sessions.toArray(),
+    db.settings.get('app'),
+    db.sets.toArray(),
+  ])
+
+  const ordered = templates.sort((a, b) => a.letter.localeCompare(b.letter))
+  const template = templateForDate(ordered, date)
+  const next = templateForDate(ordered, addDays(date, 1))
+  const session = sessions.find((s) => s.date === date)
+  const unfinished = sessions
+    .filter((s) => s.status === 'in_progress' && s.date < date)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
+
+  const active = settings
+    ? mesocycles.find((m) => m.id === settings.activeMesocycleId)
+    : undefined
+  const position = active ? mesocyclePosition(active, date) : null
+
+  const countByMeso = new Map<string, number>()
+  for (const s of sessions) {
+    countByMeso.set(s.mesocycleId, (countByMeso.get(s.mesocycleId) ?? 0) + 1)
+  }
+  const toBlock = (m: Mesocycle, live: boolean): DashboardBlock => ({
+    id: m.id,
+    startDate: m.startDate,
+    status: m.status,
+    sessionCount: countByMeso.get(m.id) ?? 0,
+    weekNumber: live ? (position?.weekNumber ?? null) : null,
+    totalWeeks: m.totalWeeks,
+    isDeloadWeek: live ? (position?.isDeloadWeek ?? false) : false,
+    isComplete: live ? (position?.isComplete ?? false) : true,
+  })
+
+  // Ordered by precedence, mirroring what the Today screen will actually
+  // offer, so the dashboard never promises an action the next screen lacks.
+  const state: TodayState = unfinished
+    ? 'finish_previous'
+    : session?.status === 'completed'
+      ? 'completed'
+      : session?.status === 'skipped'
+        ? 'skipped'
+        : session?.status === 'in_progress'
+          ? 'in_progress'
+          : position?.isComplete
+            ? 'block_complete'
+            : template
+              ? 'ready'
+              : 'rest'
+
+  return {
+    date,
+    dayLetter: template?.letter ?? null,
+    dayName: template?.name ?? null,
+    exerciseCount: template?.exerciseIds.length ?? 0,
+    state,
+    setsLoggedToday: session
+      ? allSets.filter((set) => set.sessionId === session.id).length
+      : 0,
+    streak: currentStreak(ordered, sessions, date),
+    activeBlock: active ? toBlock(active, true) : null,
+    savedBlocks: mesocycles
+      .filter((m) => m.id !== active?.id)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+      .map((m) => toBlock(m, false)),
+    nextDayLetter: next?.letter ?? null,
+    nextDayName: next?.name ?? null,
+  }
+}
+
 /** Everything the Settings screen needs, batched for live-query reactivity. */
 export interface SettingsView {
   settings: AppSettings | undefined

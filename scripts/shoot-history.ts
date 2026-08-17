@@ -132,7 +132,7 @@ async function main(): Promise<void> {
 
     // Fresh load so the injected history is what the app reads.
     await page.goto(url, { waitUntil: 'networkidle' })
-    await page.getByRole('button', { name: 'History ›' }).click()
+    await page.getByRole('button', { name: 'History' }).click()
     await page.waitForSelector('svg')
     // Recharts needs a beat to measure its responsive containers.
     await page.waitForTimeout(600)

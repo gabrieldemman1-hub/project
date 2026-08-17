@@ -104,7 +104,7 @@ function DayNav({ nav }: { nav: DayNavState }) {
         type="button"
         aria-label="Previous day"
         onClick={() => nav.setOffset(nav.offset - 1)}
-        className="num min-h-touch-min min-w-touch-min rounded-md border border-border bg-surface-raised text-base text-text-secondary active:bg-surface"
+        className="min-h-touch-min min-w-touch-min rounded-md border border-border bg-surface-raised text-base text-text-secondary active:bg-surface"
       >
         ‹
       </button>
@@ -112,7 +112,7 @@ function DayNav({ nav }: { nav: DayNavState }) {
         type="button"
         aria-label="Next day"
         onClick={() => nav.setOffset(nav.offset + 1)}
-        className="num min-h-touch-min min-w-touch-min rounded-md border border-border bg-surface-raised text-base text-text-secondary active:bg-surface"
+        className="min-h-touch-min min-w-touch-min rounded-md border border-border bg-surface-raised text-base text-text-secondary active:bg-surface"
       >
         ›
       </button>
@@ -256,13 +256,19 @@ function TrainingDay({
         )
       }
     >
-      <Header date={date} position={position} isToday={nav.isToday} />
+      <Header
+        date={date}
+        position={position}
+        isToday={nav.isToday}
+        dayLetter={template.letter}
+      />
       <DayNav nav={nav} />
 
-      <div className="mt-8 flex items-baseline gap-4">
-        <span className="num text-5xl font-bold text-accent">{template.letter}</span>
-        <span className="text-lg text-text">{template.name}</span>
-      </div>
+      {/* The header already states WEEK n · DAY X, so this is the muscle
+          groups alone rather than a second giant letter. */}
+      <p className="mt-6 text-2xl leading-snug text-balance text-text">
+        {template.name}
+      </p>
 
       <DayStatus view={view} today={today} />
 
@@ -357,36 +363,57 @@ function RestDay({ view, nav }: { view: TodayView; nav: DayNavState }) {
   )
 }
 
+/**
+ * The day header, in the owner's reference style: a bold "WEEK n · DAY X"
+ * line with the date beneath it, and the dashboard link where the reference
+ * puts its icons. Part 7 keeps nothing important in the top corners, so the
+ * corner holds only a labelled back link, never a primary action.
+ */
 function Header({
   date,
   position,
   isToday,
+  dayLetter,
 }: {
   date: string
   position: TodayView['position']
   isToday: boolean
+  dayLetter?: string | undefined
 }) {
   return (
-    <header className="flex items-baseline justify-between gap-4">
-      <p className="text-xs tracking-wider text-text-secondary uppercase">
-        {formatLongDate(date)}
-        {isToday ? (
-          <span className="ml-2 text-text-muted">· Today</span>
-        ) : null}
-      </p>
-      {position ? (
-        <p className="shrink-0 text-xs tracking-wider text-text-secondary uppercase">
-          {position.isComplete ? (
-            'Block complete'
-          ) : (
+    <header>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-lg font-bold tracking-wide text-text uppercase">
+          {position && !position.isComplete ? (
             <>
-              Week <span className="num text-text">{position.weekNumber}</span> of{' '}
-              <span className="num text-text">{position.totalWeeks}</span>
-              {position.isDeloadWeek ? ' · Deload' : ''}
+              Week <span className="num">{position.weekNumber}</span>
+              {dayLetter ? (
+                <>
+                  <span className="mx-2 text-text-muted">·</span>
+                  <span className="text-text-secondary">Day </span>
+                  <span className="num text-accent">{dayLetter}</span>
+                </>
+              ) : null}
             </>
+          ) : (
+            'Block complete'
           )}
         </p>
-      ) : null}
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="min-h-touch-min shrink-0 rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
+        >
+          ‹ Dashboard
+        </button>
+      </div>
+      <p className="mt-1 text-xs tracking-wider text-text-secondary uppercase">
+        {formatLongDate(date)}
+        {isToday ? <span className="ml-2 text-text-muted">· Today</span> : null}
+        {position?.isDeloadWeek ? (
+          <span className="ml-2 text-accent">· Deload</span>
+        ) : null}
+      </p>
     </header>
   )
 }

@@ -7,13 +7,14 @@ import { useEffect, useState } from 'react'
  * server that isn't there.
  */
 
-export type Route = '/' | '/session' | '/history' | '/settings'
+/** `/` is the dashboard — the app's front door; `/today` is the day's plan. */
+export type Route = '/' | '/today' | '/session' | '/history' | '/settings'
+
+const ROUTES: Route[] = ['/today', '/session', '/history', '/settings']
 
 function currentRoute(): Route {
-  if (window.location.hash === '#/session') return '/session'
-  if (window.location.hash === '#/history') return '/history'
-  if (window.location.hash === '#/settings') return '/settings'
-  return '/'
+  const hash = window.location.hash
+  return ROUTES.find((route) => hash === `#${route}`) ?? '/'
 }
 
 export function useRoute(): Route {

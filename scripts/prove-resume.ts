@@ -91,8 +91,23 @@ async function main(): Promise<void> {
   }
 
   try {
-    console.log('\nBROWSING — any day is reachable, back and forwards, read-only')
+    console.log('\nDASHBOARD — the front door names the day and hands off')
     const page = await openApp()
+    check(
+      'dashboard greets and states the day',
+      (await page.getByText(/Good (morning|afternoon|evening)/).count()) === 1 &&
+        (await page.getByText('Chest & Triceps').count()) === 1,
+    )
+    check(
+      'no logging controls on the dashboard itself',
+      (await page.getByRole('button', { name: 'Start session' }).count()) === 0,
+    )
+    await shot(page, 'dashboard')
+    await page.getByRole('button', { name: 'Open today’s workout' }).click()
+    await page.getByText(/· Today/).waitFor()
+    check('tapping the block opens today’s plan', true)
+
+    console.log('\nBROWSING — any day is reachable, back and forwards, read-only')
 
     // Frozen on Monday: one step forward is Tuesday, Day B.
     await page.getByRole('button', { name: 'Next day' }).click()
@@ -177,8 +192,17 @@ async function main(): Promise<void> {
 
     console.log('\nREOPEN — a fresh page against the same origin storage')
     const revived = await openApp()
+    // Reopening lands on the dashboard, which must itself say the session is
+    // underway before handing off.
+    check(
+      'the dashboard reports the session underway',
+      (await revived.getByText('Session underway').count()) === 1 &&
+        (await revived.getByText('Resume session').count()) === 1,
+    )
+    await revived.getByRole('button', { name: 'Open today’s workout' }).click()
     const resumeButton = revived.getByRole('button', { name: 'Resume session' })
-    check('home offers "Resume session"', (await resumeButton.count()) === 1)
+    await resumeButton.waitFor()
+    check('today’s plan offers "Resume session"', true)
     await resumeButton.click()
     await revived.getByText(/Exercise \d of 5/).waitFor()
 
@@ -280,9 +304,13 @@ async function main(): Promise<void> {
     await revived.getByRole('button', { name: 'Finish session' }).click()
     await revived.getByText('Session complete').waitFor()
     check(
-      'home shows the completed state with the set count',
+      'today shows the completed state with the set count',
       (await revived.getByText(/5 sets/).count()) === 1,
     )
+    // And the dashboard reflects it without being told.
+    await revived.getByRole('button', { name: '‹ Dashboard' }).click()
+    await revived.getByText(/Done · \d+ sets logged/).waitFor()
+    check('the dashboard reflects the finished session', true)
     await shot(revived, 'session-complete')
 
     console.log(

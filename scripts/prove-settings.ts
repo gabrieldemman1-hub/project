@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   try {
     console.log('\nLIBRARY — the shipped movements are saved and placeable')
     const page = await open()
-    await page.getByRole('button', { name: 'Settings ›' }).click()
+    await page.getByRole('button', { name: 'Settings' }).click()
     await page.getByText('Exercise library').waitFor()
     check(
       'the six owner exercises are in the library',
@@ -83,12 +83,14 @@ async function main(): Promise<void> {
       .selectOption({ label: 'Incline dumbbell press' })
     await page.getByRole('button', { name: 'Add selected exercise to day A' }).click()
     await page.getByRole('button', { name: '‹ Home' }).click()
+    await page.getByRole('button', { name: 'Open today’s workout' }).click()
     await page.getByText('6 exercises').waitFor()
     check('Day A now runs 6 exercises, ending with the added movement', true)
 
     console.log('\nTHEME — the switch repaints the whole app')
     const darkBg = await bg(page)
-    await page.getByRole('button', { name: 'Settings ›' }).click()
+    await page.getByRole('button', { name: '‹ Dashboard' }).click()
+    await page.getByRole('button', { name: 'Settings' }).click()
     await page.getByRole('button', { name: 'light' }).click()
     await page.waitForFunction(
       (previous) => getComputedStyle(document.body).backgroundColor !== previous,
@@ -132,8 +134,9 @@ async function main(): Promise<void> {
 
     await fresh.getByLabel('PIN', { exact: true }).fill('4711')
     await fresh.getByRole('button', { name: 'Unlock' }).click()
-    await fresh.getByText(/· Today/).waitFor()
-    check('the right PIN unlocks to the home screen', true)
+    // Unlocking lands on the dashboard, the app's front door.
+    await fresh.getByRole('button', { name: 'Open today’s workout' }).waitFor()
+    check('the right PIN unlocks to the dashboard', true)
 
     console.log(failures === 0 ? '\nRESULT: settings, themes and lock all hold.' : `\nRESULT: ${failures} FAILED.`)
   } finally {

@@ -5,4 +5,4 @@
  * Phase 7 service worker adds another cache layer. Moves into the Settings
  * screen when that exists.
  */
-export const APP_VERSION = 'Phase 6.3'
+export const APP_VERSION = 'Phase 6.4'

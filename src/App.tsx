@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 
+import { DashboardScreen } from './features/dashboard/DashboardScreen'
 import { HomeScreen } from './features/home/HomeScreen'
 import { SessionScreen } from './features/session/SessionScreen'
 import { LockScreen } from './features/settings/LockScreen'
@@ -83,6 +84,8 @@ export function App() {
 
   return route === '/session' ? (
     <SessionScreen />
+  ) : route === '/today' ? (
+    <HomeScreen />
   ) : route === '/history' ? (
     <Suspense fallback={<div className="min-h-dvh bg-bg" />}>
       <HistoryScreen />
@@ -92,6 +95,6 @@ export function App() {
       <SettingsScreen />
     </Suspense>
   ) : (
-    <HomeScreen />
+    <DashboardScreen />
   )
 }

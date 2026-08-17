@@ -54,7 +54,7 @@ export function SessionScreen() {
   const [rest, setRest] = useState<RestState | null>(null)
 
   useEffect(() => {
-    if (view === null) navigate('/')
+    if (view === null) navigate('/today')
   }, [view])
 
   if (!view) return <Screen>{null}</Screen>
@@ -678,7 +678,7 @@ function CardioForm({
         inclinePct: incline,
         speedMph: speed,
       })
-      navigate('/')
+      navigate('/today')
     } finally {
       setSaving(false)
     }

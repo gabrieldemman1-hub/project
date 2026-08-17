@@ -465,6 +465,29 @@ decision A-1 naturally. Menu placement is a deliberate exception to Part
 menu, not a primary action. Unit-tested at the data layer and proven in the
 browser gate.
 
+### Interlude: dashboard front door + red design language (owner request)
+
+**A dashboard is now what opens.** `/` is an orientation surface: a greeting,
+today's date, and one tappable card for the live mesocycle stating its week,
+today's day letter and muscle groups, and what state the day is in — with a
+call to action that always matches what the next screen will actually offer
+(Continue / Resume / Finish previous / Review / Start a new block). Saved
+blocks list beneath it; History and Settings sit in the thumb zone. Nothing
+on the dashboard logs anything: the single deliberate tap into the card is the
+hand-off, and everything that used to be the opening screen now lives on
+`/today`, which gained a "‹ Dashboard" link and a bold `WEEK n · DAY X`
+header per the reference.
+
+**Deliberate deviation from BRIEF Part 7:** the accent is now vivid red
+(`#F0323C`), not cool white, at the owner's explicit direction with reference
+screenshots. Everything else in Part 7 stands — layered near-black, exactly
+one accent, glow on at most two elements per screen, prose in near-white ink
+rather than the accent. Because the accent is itself red, the soreness /
+joint-pain flag moved to a deeper, duller red and those flags always carry a
+word as well as a colour. The light theme carries the same identity one step
+deeper for contrast on white. Recorded here rather than silently contradicting
+the brief.
+
 ### Interlude: the owner's Settings batch (Phase 7 arriving early, in part)
 
 Four requests, one deliberate refusal, all shipped:

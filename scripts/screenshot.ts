@@ -55,11 +55,15 @@ interface Shot {
   /** Frozen clock, so the screenshot is of a known day rather than "whenever". */
   date: string
   label: string
+  /** Route to shoot: '' is the dashboard, '#/today' the day's plan. */
+  hash: string
 }
 
 const SHOTS: Shot[] = [
-  { name: 'home-training-day', date: '2026-08-17T09:00:00', label: 'Monday — Day A' },
-  { name: 'home-rest-day', date: '2026-08-23T09:00:00', label: 'Sunday — rest day' },
+  { name: 'dashboard', date: '2026-08-17T09:00:00', label: 'Monday — dashboard', hash: '' },
+  { name: 'home-training-day', date: '2026-08-17T09:00:00', label: 'Monday — Day A', hash: '#/today' },
+  { name: 'dashboard-rest', date: '2026-08-23T09:00:00', label: 'Sunday — dashboard', hash: '' },
+  { name: 'home-rest-day', date: '2026-08-23T09:00:00', label: 'Sunday — rest day', hash: '#/today' },
 ]
 
 /** Overrides the safe-area custom properties to stand in for a notch. */
@@ -226,7 +230,7 @@ async function main(): Promise<void> {
 
     // Freeze the clock before any script runs so the app resolves a known day.
     await page.clock.setFixedTime(new Date(shot.date))
-    await page.goto(url, { waitUntil: 'networkidle' })
+    await page.goto(`${url}${shot.hash}`, { waitUntil: 'networkidle' })
     // Wait for the seed and the first live query rather than a fixed delay.
     await page.waitForSelector('main', { state: 'visible' })
     await page.waitForFunction(
