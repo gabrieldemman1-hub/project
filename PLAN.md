@@ -422,6 +422,20 @@ scripts/shoot-history.ts   the gate: realistic five-week seed + screenshots
 screenshots/history-charts*.png
 ```
 
+**Dashboard board (owner request):**
+```
+src/db/queries.ts          + WeekDay/WeekTotals/blockWeeks on DashboardView,
+                           computed inside the existing batched read;
+                           sessionCount now counts completed sessions only
+src/features/dashboard/DashboardScreen.tsx  week board, legend, week totals,
+                           block strip; footer moved into the pinned action bar
+src/lib/router.ts          + optional `?d=` day on a route, spent on first use
+src/features/home/HomeScreen.tsx   opens the deep-linked day, still read-only
+src/db/dashboard.test.ts   the board's states, totals and block strip
+scripts/prove-dashboard.ts the gate: states, totals, tap-through, deep link
+screenshots/dashboard-board.png · dashboard-day-peek.png
+```
+
 ### Phase 5+6 notes
 
 - Deload sessions are invisible to progression, to the greyed targets, and
@@ -487,6 +501,47 @@ joint-pain flag moved to a deeper, duller red and those flags always carry a
 word as well as a colour. The light theme carries the same identity one step
 deeper for contrast on white. Recorded here rather than silently contradicting
 the brief.
+
+### Interlude: the dashboard board (owner request — "more of a dashboard")
+
+The reference this time was RP's mesocycle builder: a multi-day board rather
+than a single card. On a phone that translates to three readouts below the
+hand-off card, answering the questions asked before a session in the order
+they get asked.
+
+- **This week.** Seven columns, Monday→Sunday, each with the weekday, the day
+  letter (`·` on Sunday) and a status bar: done, skipped, missed, today,
+  upcoming, rest. It is one divided strip rather than seven gapped chips
+  because at 375px even a 4px gap squeezes each column under the 44px touch
+  floor. Every column is tappable and opens that day on `/today`, where
+  browsing is already strictly read-only — so the board is a map as well as a
+  report. Status is never carried by colour alone: each column spells its
+  state out to a screen reader and a legend names every colour in words.
+- **The week's numbers.** Sessions, sets and pounds moved, counting *only*
+  completed sessions — an unfinished session's saved sets do not inflate the
+  week, and a skipped day is not a session trained. The same correction
+  applies to the block's own "sessions in" count, which previously included
+  skipped days.
+- **Block progress.** One segment per week of the live mesocycle, past /
+  current / future, with the deload marked `D`.
+
+**Two things this change forced:**
+
+- **The footer is now pinned**, not scrolled. Once the board made the
+  dashboard taller than a phone, a scroll region running to the bottom edge
+  dragged tappable things through the home-indicator band — the device sweep
+  caught it on three of four phones. History, Settings and the streak now sit
+  in the Screen's action bar, which reserves the safe-area inset, which also
+  puts them in the thumb zone per Part 7.
+- **The router carries an optional day** (`#/today?d=YYYY-MM-DD`), spent on
+  first render via `history.replaceState`, so a peeked day cannot strand the
+  next open on a stale date.
+
+**Gates:** 172 tests (10 new for the board and the block strip), production
+build, `npm run prove-dashboard` (13 checks: the seven states read correctly
+off their accessible names, the totals ignore unfinished work, a tapped day
+opens read-only, the deep link is spent), 16/16 device sweep, and the other
+three browser proofs re-run unchanged.
 
 ### Interlude: the owner's Settings batch (Phase 7 arriving early, in part)
 

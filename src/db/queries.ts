@@ -22,7 +22,7 @@ import {
   templateForDate,
   type MesocyclePosition,
 } from '../lib/schedule'
-import { addDays } from '../lib/date'
+import { WEEKDAY_NAMES, addDays, startOfWeek, weekdayOf } from '../lib/date'
 import { DEFAULT_CARDIO } from './seed'
 
 export async function getSettings(): Promise<AppSettings | undefined> {
@@ -302,6 +302,7 @@ export interface DashboardBlock {
   id: string
   startDate: IsoDate
   status: 'active' | 'completed'
+  /** Sessions actually finished — a skipped day is not a session trained. */
   sessionCount: number
   /** 1–6 for the live block; null for a finished one. */
   weekNumber: number | null
@@ -320,6 +321,35 @@ export type TodayState =
   | 'block_complete'
   | 'finish_previous'
 
+export type WeekDayStatus =
+  | 'rest'
+  | 'completed'
+  | 'skipped'
+  | 'in_progress'
+  | 'today'
+  | 'upcoming'
+  | 'missed'
+
+/** One column of the week board: what the day is and what became of it. */
+export interface WeekDay {
+  date: IsoDate
+  /** Mon, Tue … */
+  weekdayShort: string
+  letter: string | null
+  name: string | null
+  exerciseCount: number
+  status: WeekDayStatus
+  isToday: boolean
+  setsLogged: number
+}
+
+/** The week's totals, for the dashboard's at-a-glance numbers. */
+export interface WeekTotals {
+  sessions: number
+  sets: number
+  volumeLb: number
+}
+
 export interface DashboardView {
   date: IsoDate
   /** Null on a rest day. */
@@ -336,6 +366,11 @@ export interface DashboardView {
   /** Tomorrow's day letter, so a rest day can say what's coming. */
   nextDayLetter: string | null
   nextDayName: string | null
+  /** Monday→Sunday of the week containing `date`. */
+  week: WeekDay[]
+  weekTotals: WeekTotals
+  /** Every week of the live block, for the progress strip. */
+  blockWeeks: Array<{ week: number; isDeload: boolean; state: 'past' | 'current' | 'future' }>
 }
 
 export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
@@ -362,6 +397,7 @@ export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
 
   const countByMeso = new Map<string, number>()
   for (const s of sessions) {
+    if (s.status !== 'completed') continue
     countByMeso.set(s.mesocycleId, (countByMeso.get(s.mesocycleId) ?? 0) + 1)
   }
   const toBlock = (m: Mesocycle, live: boolean): DashboardBlock => ({
@@ -391,6 +427,78 @@ export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
               ? 'ready'
               : 'rest'
 
+  // The week board, Monday→Sunday of whatever week `date` falls in.
+  const sessionByDate = new Map(sessions.map((s) => [s.date, s]))
+  const setsBySession = new Map<string, typeof allSets>()
+  for (const set of allSets) {
+    const bucket = setsBySession.get(set.sessionId)
+    if (bucket) bucket.push(set)
+    else setsBySession.set(set.sessionId, [set])
+  }
+
+  const monday = startOfWeek(date)
+  const week: WeekDay[] = []
+  let weekSessions = 0
+  let weekSets = 0
+  let weekVolume = 0
+
+  for (let offset = 0; offset < 7; offset += 1) {
+    const dayDate = addDays(monday, offset)
+    const dayTemplate = templateForDate(ordered, dayDate)
+    const daySession = sessionByDate.get(dayDate)
+    const daySets = daySession ? (setsBySession.get(daySession.id) ?? []) : []
+    const isToday = dayDate === date
+
+    const status: WeekDayStatus = !dayTemplate
+      ? 'rest'
+      : daySession?.status === 'completed'
+        ? 'completed'
+        : daySession?.status === 'skipped'
+          ? 'skipped'
+          : daySession?.status === 'in_progress'
+            ? 'in_progress'
+            : isToday
+              ? 'today'
+              : dayDate < date
+                ? 'missed'
+                : 'upcoming'
+
+    if (daySession?.status === 'completed') {
+      weekSessions += 1
+      weekSets += daySets.length
+      weekVolume += daySets.reduce((sum, set) => sum + set.weightLb * set.reps, 0)
+    }
+
+    week.push({
+      date: dayDate,
+      weekdayShort: (WEEKDAY_NAMES[weekdayOf(dayDate)] ?? '').slice(0, 3),
+      letter: dayTemplate?.letter ?? null,
+      name: dayTemplate?.name ?? null,
+      exerciseCount: dayTemplate?.exerciseIds.length ?? 0,
+      status,
+      isToday,
+      setsLogged: daySets.length,
+    })
+  }
+
+  const currentWeek = position?.weekNumber ?? 1
+  const blockWeeks = active
+    ? Array.from({ length: active.totalWeeks }, (_, index) => {
+        const weekNumber = index + 1
+        return {
+          week: weekNumber,
+          isDeload: weekNumber === active.deloadWeek,
+          state: position?.isComplete
+            ? ('past' as const)
+            : weekNumber < currentWeek
+              ? ('past' as const)
+              : weekNumber === currentWeek
+                ? ('current' as const)
+                : ('future' as const),
+        }
+      })
+    : []
+
   return {
     date,
     dayLetter: template?.letter ?? null,
@@ -408,6 +516,9 @@ export async function getDashboardView(date: IsoDate): Promise<DashboardView> {
       .map((m) => toBlock(m, false)),
     nextDayLetter: next?.letter ?? null,
     nextDayName: next?.name ?? null,
+    week,
+    weekTotals: { sessions: weekSessions, sets: weekSets, volumeLb: weekVolume },
+    blockWeeks,
   }
 }
 

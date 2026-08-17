@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 
 import { Button } from '../../components/Button'
@@ -11,8 +11,14 @@ import {
   startSession,
   undoSkip,
 } from '../../db/mutations'
-import { WEEKDAY_NAMES, addDays, formatLongDate, weekdayOf } from '../../lib/date'
-import { navigate } from '../../lib/router'
+import {
+  WEEKDAY_NAMES,
+  addDays,
+  daysBetween,
+  formatLongDate,
+  weekdayOf,
+} from '../../lib/date'
+import { clearRouteDay, navigate, routeDay } from '../../lib/router'
 import { useToday } from '../../lib/useToday'
 import { APP_VERSION } from '../../lib/version'
 
@@ -27,8 +33,18 @@ import { APP_VERSION } from '../../lib/version'
  */
 export function HomeScreen() {
   const today = useToday()
-  /** Days away from today; 0 is home. Kept relative so midnight re-anchors. */
-  const [offset, setOffset] = useState(0)
+  /**
+   * Days away from today; 0 is home. Kept relative so midnight re-anchors.
+   * A day tapped on the dashboard's week board arrives as `?d=` and is
+   * converted to an offset here — the state stays relative either way.
+   */
+  const [offset, setOffset] = useState(() => {
+    const day = routeDay()
+    return day ? daysBetween(today, day) : 0
+  })
+  // Spend the deep link after the first render (kept out of the initialiser,
+  // which StrictMode runs twice).
+  useEffect(clearRouteDay, [])
   const date = addDays(today, offset)
   const isToday = offset === 0
 
