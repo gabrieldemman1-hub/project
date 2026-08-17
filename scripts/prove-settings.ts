@@ -70,14 +70,31 @@ async function main(): Promise<void> {
     const page = await open()
     await page.getByRole('button', { name: 'Settings' }).click()
     await page.getByText('Exercise library').waitFor()
+
+    // Backup, theme and the lock are open on arrival; the long lists are
+    // folded, so the things you actually came for are not behind a scroll.
     check(
-      'the six owner exercises are in the library',
+      'backup is reachable without scrolling past the lists',
+      await page.getByRole('button', { name: 'Export backup' }).isVisible(),
+    )
+    // Scoped to list rows: the same name also sits in every day's hidden
+    // <select>, and an <option> is never "visible" to a browser driver.
+    const libraryRow = page
+      .getByRole('listitem')
+      .filter({ hasText: 'Lateral raise dumbbells' })
+    check('the twenty-row library starts folded', !(await libraryRow.isVisible()))
+    await page.screenshot({ path: resolve(OUT_DIR, 'settings.png') })
+
+    await page.getByText('Exercise library').click()
+    await libraryRow.waitFor()
+    check(
+      'the six owner exercises are in the library once opened',
       (await page.getByText('Lateral raise dumbbells').count()) >= 1 &&
         (await page.getByText('Incline barbell press smith machine').count()) >= 1,
     )
-    await page.screenshot({ path: resolve(OUT_DIR, 'settings.png') })
 
     // Add "Incline dumbbell press" to Day A and see it on the home screen.
+    await page.getByText('Days', { exact: true }).click()
     await page
       .getByLabel('Add exercise to day A')
       .selectOption({ label: 'Incline dumbbell press' })

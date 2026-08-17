@@ -466,6 +466,24 @@ scripts/prove-settings.ts        theme screenshots wait for the crossfade
 screenshots/before/              the full pre-polish set, for comparison
 ```
 
+**Design review (owner request):**
+```
+src/styles/tokens.ts             textMuted/textSecondary/alert raised to the
+                                 contrast floor; + textFaint for decoration
+scripts/screenshot.ts            + per-node contrast audit (WCAG AA by size)
+src/components/Stepper.tsx       + highlight, for "this needs a number"
+src/features/session/SessionScreen.tsx  nav arrows flank the primary action;
+                                 honest first-set label; target vs placeholder
+src/features/session/QuestionScreen.tsx · FeedbackFlow.tsx  the sets just
+                                 logged shown above each question
+src/features/settings/SettingsScreen.tsx  collapsible sections ordered by use;
+                                 selected theme tinted; names wrap
+src/features/history/HistoryScreen.tsx  all three charts fit + deload legend
+src/features/dashboard/DashboardScreen.tsx  "Start day A"; label density cut
+scripts/prove-resume.ts · prove-settings.ts · shoot-history.ts  updated to
+                                 assert the new behaviour
+```
+
 ### Phase 5+6 notes
 
 - Deload sessions are invisible to progression, to the greyed targets, and
@@ -531,6 +549,63 @@ joint-pain flag moved to a deeper, duller red and those flags always carry a
 word as well as a colour. The light theme carries the same identity one step
 deeper for contrast on white. Recorded here rather than silently contradicting
 the brief.
+
+### Interlude: the design review (owner request — ten fixes, all shipped)
+
+A screen-by-screen review against Part 7 produced ten suggestions; the owner
+took all of them.
+
+1. **Contrast, fixed at the palette.** `textMuted` measured **2.7:1** on the
+   near-black — below the 4.5:1 floor, on exactly the 11px captions it was
+   carrying (stat labels, the week legend, `D = deload`). Raised to 4.75:1,
+   rated against `surfaceRaised` rather than the page, because this text
+   mostly sits on cards and a card is the *lighter*, worse case — a mistake
+   the first attempt made and the new audit caught. `textSecondary` moved up
+   with it to keep a real step between them, and `alert` was raised too
+   (3.3:1 on a card, and it paints sentences like "Remove lock"). A new
+   `textFaint` token holds the genuinely decorative marks — `·` separators,
+   the placeholder dash — the one case contrast ratios do not govern.
+2. **Exercise navigation left the fold.** Previous/Next sat at the end of the
+   scroll content, so changing exercise mid-workout meant scrolling past the
+   steppers. They now flank the primary action as two quiet squares, which
+   costs zero vertical space.
+3. **The light-mode theme toggle read inverted:** selected used
+   `surfaceRaised` (a grey in light) against unselected `surface` (pure
+   white), so the unselected option looked brighter. Selected is now
+   accent-tinted in both themes, plus `aria-pressed`.
+4. **A first-ever exercise no longer shows a dead red slab.** With no weight
+   to prescribe, the button says "Set a weight" and the weight stepper
+   carries an accent edge — a border, not a glow, so the two-glow budget is
+   untouched. It becomes "Log set 1 of 3" the moment a number exists.
+5. **Settings stopped truncating exercise names** — the last place in the app
+   that still did.
+6. **Settings is ordered by use and folds its long lists.** Backup,
+   Appearance and App lock open on arrival; Days, Blocks and the library are
+   `<details>` sections that say how much they hold while shut.
+7. **"Continue" became "Start day A."** It promised nothing in particular on
+   a day where nothing had started.
+8. **The feedback questions carry the work being judged.** Bottom-anchoring
+   them (Phase 8) left the top of the screen empty; it now holds the sets
+   just logged, with the last set marked on the RIR question — "2 reps left"
+   means something different after 185 × 10 than after 185 × 6.
+9. **All three history charts fit**, instead of the third sitting permanently
+   half-cut, and the hollow end-points finally say `Hollow = deload week`.
+10. **The dashboard stopped shouting.** Fifteen uppercase micro-labels became
+    five: section headings keep their case because they carry structure,
+    captions and the legend speak in sentence case, and the version stamp
+    dropped (it is in Settings).
+
+**New in the audit:** `scripts/screenshot.ts` now measures the contrast of
+every rendered text node against the background actually painted behind it,
+at the WCAG threshold for its size and weight, and fails the build below it.
+Pure punctuation is exempt as decoration. It caught the first palette attempt
+being 0.09 short, which is precisely the kind of thing a person reading hex
+codes does not catch. Gates: 183 tests, build, six browser proofs, 16/16.
+
+**One trade-off worth naming:** raising `alert` for legibility brought the
+"missed" red closer to the "done" red on the week board. Colour is never the
+only carrier — the legend names each one and every column announces its state
+to a screen reader — but the two are less distinct at 12px than they were.
 
 ### Interlude: the day plan fits one screen (owner report, from real use)
 

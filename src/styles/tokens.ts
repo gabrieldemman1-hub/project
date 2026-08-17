@@ -38,19 +38,39 @@ export const colors = {
   accentBorder: '#6E2028',
   /** Primary reading text stays near-white: red is for accent, not prose. */
   text: '#F2F3F5',
-  /** Labels and secondary copy. */
-  textSecondary: '#8A8A93',
-  /** Last session's greyed-out numbers — the target to beat. */
-  textMuted: '#56565E',
+  /** Labels and secondary copy. 6.4:1 even on the lightest raised surface. */
+  textSecondary: '#9C9CA6',
+  /**
+   * The quietest step that is still *text you read*: last session's numbers,
+   * stat captions, legends. Deliberately raised from #56565E, which measured
+   * 2.7:1 against the near-black — under the 4.5:1 accessibility floor, and
+   * failing the brief's own "legible at arm's length under gym lighting" on
+   * exactly the 11px labels it was carrying.
+   *
+   * Rated against `surfaceRaised`, not the page background: this text mostly
+   * sits on cards, and a card is lighter, so the card is the worst case
+   * (4.75:1 there, 5.4:1 on the page). De-emphasis is carried by size, case
+   * and weight — never by making text too dim to read.
+   */
+  textMuted: '#85858F',
+  /**
+   * Non-text decoration only — dot separators, empty-row placeholder dashes,
+   * disabled affordances. Nothing here carries information, which is the one
+   * case where contrast ratios do not apply. Never use it for words or
+   * numbers a person has to read.
+   */
+  textFaint: '#56565E',
   /** Text placed on top of an accent-filled surface. */
   onAccent: '#FFFFFF',
 
   /**
-   * Soreness and joint-pain flags. Now that the accent is itself red, this is
-   * a deeper, duller red so a warning never reads as a live control; those
-   * flags always carry a word as well as a colour.
+   * Soreness and joint-pain flags. Duller and softer than the accent so a
+   * warning never reads as a live control; those flags always carry a word as
+   * well as a colour. Raised from #B3403A, which measured 3.3:1 on a card —
+   * fine for the flag *fills*, but it also paints "Remove lock" and the
+   * restore warning, which are sentences you have to read.
    */
-  alert: '#B3403A',
+  alert: '#DC6058',
   /** Dimmed alert, for the tint behind a flagged row. */
   alertSurface: '#2A1614',
 } as const
@@ -74,9 +94,13 @@ export const lightColors: Record<keyof typeof colors, string> = {
   accentBorder: '#F0B3B7',
   text: '#14161C',
   textSecondary: '#5A5E68',
-  textMuted: '#9AA0AB',
+  // Same correction as dark: #9AA0AB measured 2.6:1 on white. Now 4.6:1 on
+  // the lightest surface it lands on.
+  textMuted: '#656B76',
+  textFaint: '#9AA0AB',
   onAccent: '#FFFFFF',
-  alert: '#B4453B',
+  // Deepened for the same reason as the dark alert, in the other direction.
+  alert: '#A33A31',
   alertSurface: '#F6DEDA',
 } as const
 
@@ -92,8 +116,8 @@ export const glow = {
     '0 0 0 1px rgba(240,50,60,0.30), 0 0 40px -8px rgba(240,50,60,0.55), 0 0 80px -20px rgba(240,50,60,0.40)',
   /** Rest-timer ring and other live elements. */
   ring: '0 0 32px -4px rgba(240,50,60,0.45)',
-  /** Joint pain / still sore only. */
-  alert: '0 0 0 1px rgba(179,64,58,0.35), 0 0 28px -8px rgba(179,64,58,0.40)',
+  /** Joint pain / still sore only. Tracks the alert colour above. */
+  alert: '0 0 0 1px rgba(220,96,88,0.35), 0 0 28px -8px rgba(220,96,88,0.40)',
   none: 'none',
 } as const
 

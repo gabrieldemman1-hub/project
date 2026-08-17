@@ -84,7 +84,10 @@ export function HistoryScreen() {
             ))}
           </div>
 
-          <div className="mt-6 flex flex-col gap-4">
+          {/* All three charts fit the viewport: the third used to sit
+              permanently half-cut at the fold, which read as a rendering
+              accident rather than an invitation to scroll. */}
+          <div className="mt-5 flex flex-col gap-3">
             <ChartCard
               title="Top set weight"
               unit="lb"
@@ -108,6 +111,23 @@ export function HistoryScreen() {
             >
               <SetsBars points={view.points} />
             </ChartCard>
+
+            {/* The hollow points had no explanation anywhere in the UI. */}
+            {view.points.some((point) => point.isDeload) ? (
+              <p className="flex items-center gap-2 text-micro tracking-wider text-text-muted uppercase">
+                <svg width="10" height="10" aria-hidden>
+                  <circle
+                    cx="5"
+                    cy="5"
+                    r="3.5"
+                    fill={colors.bg}
+                    stroke={colors.accent}
+                    strokeWidth="1.5"
+                  />
+                </svg>
+                Hollow = deload week
+              </p>
+            ) : null}
           </div>
         </>
       )}
@@ -127,7 +147,7 @@ function ChartCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-border bg-surface px-4 pt-4 pb-2">
+    <section className="rounded-lg border border-border bg-surface px-4 pt-3 pb-1">
       <div className="flex items-baseline justify-between gap-4">
         <h2 className="text-xs tracking-wider text-text-secondary uppercase">{title}</h2>
         {latest !== undefined ? (
@@ -139,7 +159,7 @@ function ChartCard({
           </p>
         ) : null}
       </div>
-      <div className="mt-3">{children}</div>
+      <div className="mt-2">{children}</div>
     </section>
   )
 }
@@ -214,7 +234,7 @@ function HistoryLine({
 }) {
   const unit = 'lb'
   return (
-    <ResponsiveContainer width="100%" height={170}>
+    <ResponsiveContainer width="100%" height={128}>
       <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
         <CartesianGrid vertical={false} stroke={colors.border} />
         <XAxis
@@ -253,7 +273,7 @@ function HistoryLine({
 
 function SetsBars({ points }: { points: HistoryPoint[] }) {
   return (
-    <ResponsiveContainer width="100%" height={150}>
+    <ResponsiveContainer width="100%" height={116}>
       <BarChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
         <CartesianGrid vertical={false} stroke={colors.border} />
         <XAxis

@@ -162,6 +162,12 @@ async function main(): Promise<void> {
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
     )
     check('no horizontal overflow', !overflow)
+    // The hollow end-point marks the deload week; it used to mean that to
+    // nobody but the code.
+    check(
+      'the hollow deload marker is explained on screen',
+      (await page.getByText('Hollow = deload week').count()) === 1,
+    )
 
     await page.screenshot({ path: resolve(OUT_DIR, 'history-charts.png'), fullPage: false })
     await page.mouse.wheel(0, 500)

@@ -12,6 +12,7 @@ export function Stepper({
   step,
   min = 0,
   unit,
+  highlight = false,
   onChange,
 }: {
   label: string
@@ -19,6 +20,12 @@ export function Stepper({
   step: number
   min?: number
   unit?: string
+  /**
+   * Marks this stepper as the thing that needs a number before anything else
+   * can happen — an accent edge on the value, not a glow, so the screen's
+   * two-glow budget (Part 7) is untouched.
+   */
+  highlight?: boolean
   onChange: (next: number) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -85,7 +92,9 @@ export function Stepper({
             setDraft(shown)
             setEditing(true)
           }}
-          className="min-h-touch-comfortable min-w-0 flex-1 rounded-md text-center"
+          className={`min-h-touch-comfortable min-w-0 flex-1 rounded-md text-center ${
+            highlight ? 'border border-accent-border bg-accent-surface' : ''
+          }`}
         >
           <span className="num text-3xl font-medium text-text">{shown}</span>
           {unit ? (

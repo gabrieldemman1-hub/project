@@ -153,11 +153,11 @@ function DayStatus({ view, today }: { view: TodayView; today: string }) {
     session?.status === 'completed' ? (
       <>
         Completed
-        <span className="mx-2 text-text-muted">·</span>
+        <span className="mx-2 text-text-faint">·</span>
         <span className="num text-text">{view.setsLoggedToday}</span> sets
         {session.cardio ? (
           <>
-            <span className="mx-2 text-text-muted">·</span>
+            <span className="mx-2 text-text-faint">·</span>
             <span className="num text-text">{session.cardio.durationMin}</span> min
             cardio
           </>
@@ -232,11 +232,11 @@ function TrainingDay({
         ) : completed ? (
           <p className="text-center text-xs tracking-wider text-text-secondary uppercase">
             Session complete
-            <span className="mx-2 text-text-muted">·</span>
+            <span className="mx-2 text-text-faint">·</span>
             <span className="num text-text">{view.setsLoggedToday}</span> sets
             {session?.cardio ? (
               <>
-                <span className="mx-2 text-text-muted">·</span>
+                <span className="mx-2 text-text-faint">·</span>
                 <span className="num text-text">{session.cardio.durationMin}</span> min
                 cardio
               </>
@@ -289,7 +289,7 @@ function TrainingDay({
           another row stolen from the exercise list below. */}
       <p className="mt-2 text-sm text-text-secondary">
         {exercises.length} exercises
-        <span className="mx-2 text-text-muted">·</span>
+        <span className="mx-2 text-text-faint">·</span>
         <span className="num">{view.cardioMinutes}</span> min walk after
       </p>
 
@@ -415,7 +415,7 @@ function Header({
               Week <span className="num">{position.weekNumber}</span>
               {dayLetter ? (
                 <>
-                  <span className="mx-2 text-text-muted">·</span>
+                  <span className="mx-2 text-text-faint">·</span>
                   <span className="text-text-secondary">Day </span>
                   <span className="num text-accent">{dayLetter}</span>
                 </>

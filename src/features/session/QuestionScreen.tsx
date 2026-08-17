@@ -18,6 +18,7 @@ export interface QuestionOption<T extends string> {
 export function QuestionScreen<T extends string>({
   step,
   question,
+  context,
   options,
   onAnswer,
   onSkip,
@@ -26,6 +27,13 @@ export function QuestionScreen<T extends string>({
   /** e.g. "Feedback · 2 of 3" */
   step: string
   question: ReactNode
+  /**
+   * What was just done, shown above the question. Bottom-anchoring the
+   * question left the top of the screen empty; the work being judged is the
+   * one thing worth putting there — you answer "how was the pump" better
+   * looking at the sets than at black.
+   */
+  context?: ReactNode
   options: ReadonlyArray<QuestionOption<T>>
   onAnswer: (value: T) => void
   onSkip?: (() => void) | undefined
@@ -34,6 +42,8 @@ export function QuestionScreen<T extends string>({
   return (
     <Screen>
       <p className="text-xs tracking-wider text-text-secondary uppercase">{step}</p>
+
+      {context ? <div className="mt-6">{context}</div> : null}
 
       {/* The question sits directly above the answers rather than at the top
           of the screen (Phase 8): between sets this is read at arm's length

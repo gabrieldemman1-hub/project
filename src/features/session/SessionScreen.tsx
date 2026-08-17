@@ -191,6 +191,7 @@ function SessionBody({
       <FeedbackFlow
         key={pendingFeedback.exerciseId}
         exerciseName={exercise?.name ?? 'Exercise'}
+        sets={view.setsByExercise[pendingFeedback.exerciseId] ?? []}
         onComplete={(feedback) => {
           void (async () => {
             await saveExerciseFeedback(session.id, pendingFeedback.exerciseId, feedback)
@@ -401,22 +402,57 @@ function ExercisePane({
   return (
     <Screen
       action={
-        planDone && !editing ? (
-          // The plan is complete: the honest action is moving on, not a
-          // silent invitation to a set nobody prescribed. Bonus sets are a
-          // deliberate "Add a set" in the ⋯ menu.
-          <Button onClick={onNext}>{isLast ? 'Cardio ›' : 'Next exercise ›'}</Button>
-        ) : (
-          <Button onClick={() => void logSet()} disabled={saving || weight <= 0 || reps <= 0}>
-            {saving
-              ? 'Saving…'
-              : editing
-                ? `Save set ${editing.index + 1}`
-                : prescription
-                  ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
-                  : `Log set ${nextSetIndex + 1}`}
-          </Button>
-        )
+        /*
+         * Exercise navigation flanks the primary action rather than sitting
+         * at the end of the scroll content, where it was below the fold on
+         * every phone — you had to scroll past the steppers to change
+         * exercise, mid-workout. Flanking costs no vertical space at all:
+         * the arrows are the same height as the button they sit beside.
+         */
+        <div className="flex items-stretch gap-2">
+          {/* "Go to …" rather than "Previous/Next exercise", so an arrow's
+              accessible name can never be confused with the primary button's
+              own "Next exercise ›" label. */}
+          <NavArrow
+            label="Go to previous exercise"
+            glyph="‹"
+            onClick={onPrev ?? undefined}
+            disabled={!onPrev}
+          />
+          <div className="min-w-0 flex-1">
+            {planDone && !editing ? (
+              // The plan is complete: the honest action is moving on, not a
+              // silent invitation to a set nobody prescribed. Bonus sets are a
+              // deliberate "Add a set" in the ⋯ menu.
+              <Button onClick={onNext}>
+                {isLast ? 'Cardio ›' : 'Next exercise ›'}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => void logSet()}
+                disabled={saving || weight <= 0 || reps <= 0}
+              >
+                {saving
+                  ? 'Saving…'
+                  : // A first-ever exercise starts at 0 lb, so the hero button
+                    // would otherwise render as a dimmed red slab before you
+                    // have done anything wrong. Say what is missing instead.
+                    weight <= 0
+                    ? 'Set a weight'
+                    : editing
+                      ? `Save set ${editing.index + 1}`
+                      : prescription
+                        ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
+                        : `Log set ${nextSetIndex + 1}`}
+              </Button>
+            )}
+          </div>
+          <NavArrow
+            label={isLast ? 'Go to cardio' : 'Go to next exercise'}
+            glyph="›"
+            onClick={onNext}
+          />
+        </div>
       }
     >
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="flex min-h-full flex-col">
@@ -489,11 +525,11 @@ function ExercisePane({
           {prescription ? (
             <>
               <span className="num">{prescription.plannedSets}</span> sets
-              <span className="mx-2 text-text-muted">·</span>
+              <span className="mx-2 text-text-faint">·</span>
             </>
           ) : null}
           {exercise.repTargetMin}–{exercise.repTargetMax} reps
-          <span className="mx-2 text-text-muted">·</span>
+          <span className="mx-2 text-text-faint">·</span>
           <span className="num">{exercise.restSeconds}s</span> rest
         </p>
 
@@ -523,10 +559,19 @@ function ExercisePane({
                     <span className="num w-5 shrink-0 text-sm text-text-muted">
                       {setIndex + 1}
                     </span>
-                    {/* Last session, greyed: the target to beat. */}
-                    <span className="num w-20 shrink-0 text-left text-sm text-text-muted">
-                      {target ? `${target.weightLb} × ${target.reps}` : '—'}
-                    </span>
+                    {/* Last session, greyed: the target to beat. A number you
+                        read, so it sits on the readable grey; the placeholder
+                        dash for a first-ever exercise carries no information
+                        and stays decoration. */}
+                    {target ? (
+                      <span className="num w-20 shrink-0 text-left text-sm text-text-muted">
+                        {target.weightLb} × {target.reps}
+                      </span>
+                    ) : (
+                      <span className="num w-20 shrink-0 text-left text-sm text-text-faint">
+                        —
+                      </span>
+                    )}
                     <span className="num flex-1 text-right text-base text-text">
                       {logged ? `${logged.weightLb} × ${logged.reps}` : ''}
                     </span>
@@ -564,7 +609,7 @@ function ExercisePane({
         {editing ? (
           <p className="mt-4 text-xs tracking-wider text-text-secondary uppercase">
             Editing set <span className="num text-text">{editing.index + 1}</span>
-            <span className="mx-2 text-text-muted">·</span>
+            <span className="mx-2 text-text-faint">·</span>
             tap the row again to cancel
           </p>
         ) : null}
@@ -579,6 +624,10 @@ function ExercisePane({
               value={weight}
               step={exercise.weightIncrementLb}
               unit="lb"
+              // A first-ever exercise has no weight to prescribe, so the
+              // stepper is what needs attention — marked with a border rather
+              // than a glow, which would breach Part 7's two-per-screen cap.
+              highlight={weight <= 0}
               onChange={(next) => {
                 setTouched(true)
                 setWeight(next)
@@ -601,23 +650,6 @@ function ExercisePane({
           </div>
         </div>
 
-        <div className="mt-auto flex gap-3 pt-8">
-          <button
-            type="button"
-            onClick={onPrev ?? undefined}
-            disabled={!onPrev}
-            className="min-h-touch-min flex-1 rounded-md border border-border bg-surface-raised text-sm text-text-secondary disabled:opacity-30"
-          >
-            ‹ Previous
-          </button>
-          <button
-            type="button"
-            onClick={onNext}
-            className="min-h-touch-min flex-1 rounded-md border border-border bg-surface-raised text-sm text-text"
-          >
-            {isLast ? 'Cardio ›' : 'Next ›'}
-          </button>
-        </div>
       </div>
 
       {rest ? (
@@ -628,6 +660,36 @@ function ExercisePane({
         />
       ) : null}
     </Screen>
+  )
+}
+
+/**
+ * A quiet square that steps between exercises, sized to stand beside the
+ * primary action without competing with it.
+ */
+function NavArrow({
+  label,
+  glyph,
+  onClick,
+  disabled = false,
+}: {
+  label: string
+  glyph: string
+  onClick: (() => void) | undefined
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+      // Text face, not the numeric one: Space Grotesk draws ‹ › as bare angle
+      // brackets at this size.
+      className="min-h-control min-w-touch-comfortable shrink-0 rounded-xl border border-border bg-surface-raised text-xl text-text-secondary active:bg-surface disabled:opacity-30"
+    >
+      {glyph}
+    </button>
   )
 }
 

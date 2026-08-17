@@ -171,6 +171,91 @@ async function audit(page: Page, insets: Device['insets']) {
       if (visibleBottom > window.innerHeight - bottom) underHomeIndicator += 1
     }
 
+    /*
+     * Contrast. The brief asks for text "legible at arm's length under gym
+     * lighting", and the measurable floor for that is WCAG AA: 4.5:1 for
+     * normal text, 3:1 for large. Checked on the rendered pixels rather than
+     * on the token file, so a component that reaches for the wrong grey is
+     * caught even though the palette is correct.
+     */
+    /*
+     * Colour parsing is written inline, twice, rather than pulled into a
+     * helper: tsx compiles this file with esbuild's keepNames, which rewrites
+     * *any* function it can name — declaration or arrow assigned to a const —
+     * into a call to a `__name` helper that does not exist inside
+     * page.evaluate's scope. Only anonymous callbacks survive. Same trap
+     * prove-dashboard hit from the other direction.
+     */
+    const CSS_RGB = /rgba?\(([^)]+)\)/
+    const lowContrast: Array<{ text: string; ratio: number; size: number }> = []
+    for (const element of document.querySelectorAll<HTMLElement>(
+      'main p, main span, main h1, main h2, [data-screen-action] p, [data-screen-action] span',
+    )) {
+      // Only leaf text: a wrapper's colour is not what any glyph is painted in.
+      const text = element.textContent?.trim() ?? ''
+      if (text === '' || element.querySelector('p, span, h1, h2')) continue
+      // Pure punctuation — the · separators, a placeholder dash — is decoration
+      // and carries no information, the one case contrast ratios don't govern.
+      if (!/[a-z0-9]/i.test(text)) continue
+      const box = element.getBoundingClientRect()
+      if (box.width === 0 || box.height === 0) continue
+
+      const style = getComputedStyle(element)
+      const inkParts = (CSS_RGB.exec(style.color)?.[1] ?? '')
+        .split(/[,\s/]+/)
+        .filter(Boolean)
+        .map(Number)
+      if (inkParts.length < 3) continue
+      const colour: [number, number, number] = [
+        inkParts[0] ?? 0,
+        inkParts[1] ?? 0,
+        inkParts[2] ?? 0,
+      ]
+
+      // The nearest ancestor that actually paints a background is what this
+      // text sits on. A fully transparent colour paints nothing, so it is
+      // skipped rather than rated.
+      let backdrop: [number, number, number] = [0, 0, 0]
+      let node: HTMLElement | null = element
+      while (node) {
+        const bgParts = (CSS_RGB.exec(getComputedStyle(node).backgroundColor)?.[1] ?? '')
+          .split(/[,\s/]+/)
+          .filter(Boolean)
+          .map(Number)
+        if (bgParts.length >= 3 && bgParts[3] !== 0) {
+          backdrop = [bgParts[0] ?? 0, bgParts[1] ?? 0, bgParts[2] ?? 0]
+          break
+        }
+        node = node.parentElement
+      }
+
+      const [a, b] = [colour, backdrop].map((rgb) => {
+        const linear = rgb.map((channel) => {
+          const c = channel / 255
+          return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)
+        })
+        return (
+          0.2126 * (linear[0] ?? 0) +
+          0.7152 * (linear[1] ?? 0) +
+          0.0722 * (linear[2] ?? 0)
+        )
+      }) as [number, number]
+
+      const fontSize = parseFloat(style.fontSize)
+      const bold = Number(style.fontWeight) >= 700
+      // WCAG "large text": 18.66px bold, or 24px at any weight.
+      const required = fontSize >= 24 || (bold && fontSize >= 18.66) ? 3 : 4.5
+      const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+
+      if (ratio < required) {
+        lowContrast.push({
+          text: text.slice(0, 24),
+          ratio: Math.round(ratio * 100) / 100,
+          size: Math.round(fontSize),
+        })
+      }
+    }
+
     // The day's full exercise list must be readable without scrolling (owner
     // report: the old three-line cards buried half the workout behind the
     // pinned action button). Only measured when the screen has a list.
@@ -184,6 +269,7 @@ async function audit(page: Page, insets: Device['insets']) {
 
     return {
       action,
+      lowContrast,
       listFullyVisible,
       safeArea: { underNotch, underHomeIndicator },
       documentScrollsVertically:
@@ -280,6 +366,12 @@ async function main(): Promise<void> {
           .map((t) => `"${t.text}"`)
           .join(', ')}`,
       )
+    if (result.lowContrast.length > 0)
+      problems.push(
+        `text under the contrast floor: ${result.lowContrast
+          .map((t) => `"${t.text}" ${t.ratio}:1 at ${t.size}px`)
+          .join(', ')}`,
+      )
     if (!result.tabularFigures) problems.push('digits are not tabular')
     if (result.glowing > 2) problems.push(`${result.glowing} glowing elements`)
 
@@ -338,6 +430,15 @@ async function main(): Promise<void> {
           result.safeArea.underNotch === 0 && result.safeArea.underHomeIndicator === 0
             ? 'yes'
             : `NO — ${result.safeArea.underNotch} under notch, ${result.safeArea.underHomeIndicator} under home indicator`
+        }`,
+      )
+      console.log(
+        `  text contrast          ${
+          result.lowContrast.length === 0
+            ? 'all text at or above the AA floor'
+            : result.lowContrast
+                .map((t) => `"${t.text}" ${t.ratio}:1`)
+                .join(', ')
         }`,
       )
       console.log(

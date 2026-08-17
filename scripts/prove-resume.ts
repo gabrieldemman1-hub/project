@@ -149,14 +149,22 @@ async function main(): Promise<void> {
 
     console.log('\nRECOMMENDATION — the engine explains itself on the exercise')
     await page.getByText(/First time — pick a weight/).waitFor()
+    // Reaching this line at all is the assertion: the waitFor above only
+    // resolves once the engine's first-time sentence is on screen.
+    check('the engine explains itself before the first set', true)
+    // A first-ever exercise has no weight to prescribe, so the primary action
+    // names what is missing rather than rendering as a dimmed red slab.
     check(
-      'first-time sentence shown with 3 planned sets',
-      (await page.getByRole('button', { name: 'Log set 1 of 3' }).count()) === 1,
+      'the action asks for a weight before it offers to log',
+      (await page.getByRole('button', { name: 'Set a weight' }).count()) === 1 &&
+        (await page.getByRole('button', { name: 'Log set 1 of 3' }).count()) === 0,
     )
     await shot(page, 'session-recommendation')
 
     console.log('\nSESSION — log sets, then kill the tab without warning')
     await typeIntoStepper(page, 'Weight', '185')
+    await page.getByRole('button', { name: 'Log set 1 of 3' }).waitFor()
+    check('and becomes Log set 1 of 3 the moment a weight exists', true)
     await page.getByRole('button', { name: 'Log set 1 of 3' }).click()
     await page.getByRole('button', { name: 'Dismiss' }).waitFor()
     check('rest timer counts down from 2:30', (await page.getByText('2:30').count()) === 1)
@@ -168,7 +176,7 @@ async function main(): Promise<void> {
     await page.getByRole('button', { name: 'Dismiss' }).click()
 
     // Leaving with sets logged but no feedback: the questions intercept.
-    await page.getByRole('button', { name: 'Next ›' }).click()
+    await page.getByRole('button', { name: 'Go to next exercise' }).click()
     await page.getByText('How was the pump?').waitFor()
     await shot(page, 'feedback-pump')
     await page.getByRole('button', { name: 'Moderate' }).click()
@@ -219,7 +227,7 @@ async function main(): Promise<void> {
       (await revived.getByRole('button', { name: 'Log set 2 of 3' }).count()) === 1,
     )
 
-    await revived.getByRole('button', { name: '‹ Previous' }).click()
+    await revived.getByRole('button', { name: 'Go to previous exercise' }).click()
     await revived.getByText('Exercise 1 of 5').waitFor()
     check(
       'exercise 1’s sets survived: 185 × 8 and 185 × 7',
@@ -229,7 +237,7 @@ async function main(): Promise<void> {
     await shot(revived, 'resume-after-kill')
 
     // Exercise 1 already gave feedback — moving on must NOT re-ask.
-    await revived.getByRole('button', { name: 'Next ›' }).click()
+    await revived.getByRole('button', { name: 'Go to next exercise' }).click()
     await revived.getByText('Exercise 2 of 5').waitFor()
     check(
       'answered feedback is never re-asked',
@@ -276,7 +284,11 @@ async function main(): Promise<void> {
     await revived.getByRole('button', { name: 'Next exercise ›' }).click()
     await revived.getByText('Exercise 3 of 5').waitFor()
 
-    // Add a set from the ⋯ menu: 3 planned becomes 4.
+    // Add a set from the ⋯ menu: 3 planned becomes 4. Exercise 3 is also a
+    // first-timer, so give it a weight — the action names the plan only once
+    // it has a number to log.
+    await typeIntoStepper(revived, 'Weight', '90')
+    await revived.getByRole('button', { name: 'Log set 1 of 3' }).waitFor()
     await revived.getByRole('button', { name: 'Exercise options' }).click()
     await revived.getByRole('button', { name: 'Add a set' }).click()
     await revived.getByRole('button', { name: 'Log set 1 of 4' }).waitFor()
@@ -292,7 +304,7 @@ async function main(): Promise<void> {
     )
 
     for (let i = 0; i < 2; i += 1) {
-      await revived.getByRole('button', { name: /Next ›|Cardio ›/ }).click()
+      await revived.getByRole('button', { name: /Go to next exercise|Go to cardio/ }).click()
     }
     await revived.getByText('Incline walk').waitFor()
     check(

@@ -47,31 +47,40 @@ export function SettingsScreen() {
     >
       <p className="text-xs tracking-wider text-text-secondary uppercase">Settings</p>
 
-      <Section title="Days">
+      {/*
+       * Ordered by how often it is actually opened, and the long lists are
+       * folded shut. Backup, theme and the lock used to sit at the bottom
+       * behind three day editors and a twenty-row library — everything you
+       * came here for was a scroll away from everything you didn't.
+       */}
+      <Section title="Backup" defaultOpen>
+        <BackupManager view={view} />
+      </Section>
+
+      <Section title="Appearance" defaultOpen>
+        <ThemeToggle current={view.settings?.theme ?? 'dark'} />
+      </Section>
+
+      <Section title="App lock" defaultOpen>
+        <LockManager view={view} />
+      </Section>
+
+      <Section title="Days" summary={`${view.templates.length} days`}>
         {view.templates.map((template) => (
           <DayEditor key={template.id} template={template} view={view} />
         ))}
       </Section>
 
-      <Section title="Exercise library">
-        <LibraryList view={view} />
-        <AddExerciseForm view={view} />
-      </Section>
-
-      <Section title="Blocks">
+      <Section title="Blocks" summary={`${view.mesocycles.length} saved`}>
         <BlocksList view={view} />
       </Section>
 
-      <Section title="Backup">
-        <BackupManager view={view} />
-      </Section>
-
-      <Section title="Appearance">
-        <ThemeToggle current={view.settings?.theme ?? 'dark'} />
-      </Section>
-
-      <Section title="App lock">
-        <LockManager view={view} />
+      <Section
+        title="Exercise library"
+        summary={`${view.exercises.length} movements`}
+      >
+        <LibraryList view={view} />
+        <AddExerciseForm view={view} />
       </Section>
 
       <p className="mt-10 text-micro tracking-wider text-text-muted uppercase">
@@ -81,12 +90,41 @@ export function SettingsScreen() {
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * A collapsible section. Built on <details>, so keyboard, screen readers and
+ * find-in-page all work with no state of our own; sections holding long lists
+ * open on demand and say how much they hold while shut.
+ */
+function Section({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  /** Shown beside the title while collapsed, e.g. "20 movements". */
+  summary?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
   return (
-    <section className="mt-8">
-      <h2 className="text-xs tracking-wider text-text-secondary uppercase">{title}</h2>
+    <details className="mt-8 group" open={defaultOpen}>
+      <summary className="flex min-h-touch-min cursor-pointer list-none items-center justify-between gap-3">
+        <h2 className="text-xs tracking-wider text-text-secondary uppercase">{title}</h2>
+        <span className="flex shrink-0 items-center gap-2">
+          {summary ? (
+            <span className="text-micro tracking-wider text-text-muted uppercase">
+              {summary}
+            </span>
+          ) : null}
+          <span className="num text-base text-text-secondary group-open:hidden">+</span>
+          <span className="num hidden text-base text-text-secondary group-open:inline">
+            −
+          </span>
+        </span>
+      </summary>
       <div className="mt-3 flex flex-col gap-3">{children}</div>
-    </section>
+    </details>
   )
 }
 
@@ -100,14 +138,16 @@ function DayEditor({ template, view }: { template: DayTemplate; view: SettingsVi
     <div className="rounded-lg border border-border bg-surface px-4 py-4">
       <p className="text-sm text-text">
         <span className="num font-bold">{template.letter}</span>
-        <span className="mx-2 text-text-muted">·</span>
+        <span className="mx-2 text-text-faint">·</span>
         {template.name}
       </p>
 
       <ul className="mt-3 flex flex-col gap-2">
         {inDay.map((exerciseId, index) => (
           <li key={exerciseId} className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-sm text-text-secondary">
+            {/* Wraps, never truncates — the movement name is the content, and
+                this was the last place in the app still cutting it off. */}
+            <span className="min-w-0 flex-1 text-sm leading-snug text-text-secondary">
               {nameById.get(exerciseId) ?? '—'}
             </span>
             <button
@@ -182,7 +222,7 @@ function LibraryList({ view }: { view: SettingsView }) {
           <span className="min-w-0 flex-1 text-sm text-text">{exercise.name}</span>
           <span className="shrink-0 text-micro tracking-wider text-text-secondary uppercase">
             {exercise.muscleGroupName}
-            <span className="mx-1 text-text-muted">·</span>
+            <span className="mx-1 text-text-faint">·</span>
             <span className="num">
               {exercise.repTargetMin}–{exercise.repTargetMax}
             </span>
@@ -281,7 +321,7 @@ function BlocksList({ view }: { view: SettingsView }) {
             </span>
             <span className="shrink-0 text-micro tracking-wider text-text-secondary uppercase">
               {mesocycle.status === 'active' ? 'Current' : 'Saved'}
-              <span className="mx-1 text-text-muted">·</span>
+              <span className="mx-1 text-text-faint">·</span>
               <span className="num">{mesocycle.sessionCount}</span> sessions
             </span>
           </li>
@@ -510,11 +550,17 @@ function ThemeToggle({ current }: { current: Theme }) {
           key={theme}
           type="button"
           onClick={() => void setTheme(theme)}
+          // The selected option is tinted rather than merely "raised": in the
+          // light theme `surfaceRaised` is a grey and `surface` is pure white,
+          // so the old pairing made the *unselected* button the brighter one
+          // and the control read inverted. An accent tint is unambiguously the
+          // chosen one in both themes.
           className={`min-h-touch-min flex-1 rounded-md border text-sm capitalize ${
             current === theme
-              ? 'border-border-strong bg-surface-raised text-text'
+              ? 'border-accent-border bg-accent-surface font-medium text-text'
               : 'border-border bg-surface text-text-secondary'
           }`}
+          aria-pressed={current === theme}
         >
           {theme}
         </button>

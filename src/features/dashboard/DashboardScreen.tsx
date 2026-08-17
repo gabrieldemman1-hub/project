@@ -13,7 +13,6 @@ import {
 import { formatLongDate, fromIsoDate } from '../../lib/date'
 import { navigate } from '../../lib/router'
 import { useToday } from '../../lib/useToday'
-import { APP_VERSION } from '../../lib/version'
 
 /**
  * The dashboard — what opens when the app opens (product owner request).
@@ -47,7 +46,7 @@ export function DashboardScreen() {
     <Screen
       action={
         <div>
-          <p className="text-xs tracking-wider text-text-secondary uppercase">
+          <p className="text-sm text-text-secondary">
             {view.streak === 0 ? (
               'No streak yet'
             ) : (
@@ -60,14 +59,14 @@ export function DashboardScreen() {
             <button
               type="button"
               onClick={() => navigate('/history')}
-              className="min-h-touch-min flex-1 rounded-md border border-border bg-surface text-xs tracking-wider text-text-secondary uppercase"
+              className="min-h-touch-min flex-1 rounded-md border border-border bg-surface text-sm text-text-secondary"
             >
               History
             </button>
             <button
               type="button"
               onClick={() => navigate('/settings')}
-              className="min-h-touch-min flex-1 rounded-md border border-border bg-surface text-xs tracking-wider text-text-secondary uppercase"
+              className="min-h-touch-min flex-1 rounded-md border border-border bg-surface text-sm text-text-secondary"
             >
               Settings
             </button>
@@ -114,7 +113,7 @@ export function DashboardScreen() {
                 <span className="text-sm text-text-secondary">
                   {monthAndYear(block.startDate)}
                 </span>
-                <span className="shrink-0 text-micro tracking-wider text-text-muted uppercase">
+                <span className="shrink-0 text-xs text-text-muted">
                   <span className="num">{block.sessionCount}</span>{' '}
                   {block.sessionCount === 1 ? 'session' : 'sessions'}
                 </span>
@@ -123,10 +122,6 @@ export function DashboardScreen() {
           </ul>
         </section>
       ) : null}
-
-      <p className="mt-8 text-micro tracking-wider text-text-muted uppercase">
-        {APP_VERSION}
-      </p>
     </Screen>
   )
 }
@@ -195,7 +190,9 @@ function BlockCard({
       )}
 
       <p className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-sm">
-        <span className="font-medium text-accent">{callToAction(view.state)}</span>
+        <span className="font-medium text-accent">
+          {callToAction(view.state, view.dayLetter)}
+        </span>
         <span className="shrink-0 text-accent">›</span>
       </p>
       <p className="mt-1 text-micro tracking-wider text-text-muted uppercase">
@@ -231,7 +228,12 @@ function WeekBoard({ week, totals }: { week: WeekDay[]; totals: WeekTotals }) {
         ))}
       </ul>
 
-      <p className="mt-3 flex flex-wrap gap-3 text-micro tracking-wider text-text-muted uppercase">
+      {/* Sentence case, not four more shouted labels: the dashboard was
+          running fifteen uppercase micro-labels, which turned Part 7's
+          "small text, generously spaced" into static. Section headings stay
+          uppercase — they carry the structure — and everything that is merely
+          a caption speaks quietly. */}
+      <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
         <Key className="bg-accent" label="Done" />
         <Key className="bg-text-muted" label="Skipped" />
         <Key className="bg-alert" label="Missed" />
@@ -260,9 +262,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="rounded-md border border-border bg-surface px-3 py-3">
       <p className="num text-xl leading-tight text-text">{value}</p>
-      <p className="mt-1 text-micro tracking-wider text-text-muted uppercase">
-        {label}
-      </p>
+      <p className="mt-1 text-xs text-text-muted">{label}</p>
     </div>
   )
 }
@@ -354,9 +354,7 @@ function BlockStrip({ weeks }: { weeks: DashboardView['blockWeeks'] }) {
         <h2 className="text-xs tracking-wider text-text-secondary uppercase">
           Block progress
         </h2>
-        <p className="shrink-0 text-micro tracking-wider text-text-muted uppercase">
-          D = deload
-        </p>
+        <p className="shrink-0 text-xs text-text-muted">D = deload</p>
       </div>
       <ul className="mt-3 flex gap-1">
         {weeks.map((week) => (
@@ -408,7 +406,7 @@ function BackupNudge({ days }: { days: number }) {
   )
 }
 
-function callToAction(state: TodayState): string {
+function callToAction(state: TodayState, dayLetter: string | null): string {
   switch (state) {
     case 'in_progress':
       return 'Resume session'
@@ -424,7 +422,9 @@ function callToAction(state: TodayState): string {
       return 'Open the week'
     case 'ready':
     default:
-      return 'Continue'
+      // "Continue" promised nothing in particular on a day where nothing has
+      // started yet. Name the workout instead.
+      return dayLetter ? `Start day ${dayLetter}` : 'Start workout'
   }
 }
 
