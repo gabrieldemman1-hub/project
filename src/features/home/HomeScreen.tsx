@@ -404,13 +404,22 @@ function Streak({ streak }: { streak: number }) {
             </>
           )}
         </p>
-        <button
-          type="button"
-          onClick={() => navigate('/history')}
-          className="min-h-touch-min shrink-0 rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
-        >
-          History ›
-        </button>
+        <span className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => navigate('/history')}
+            className="min-h-touch-min rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
+          >
+            History ›
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="min-h-touch-min rounded-md px-2 text-xs tracking-wider text-text-secondary uppercase"
+          >
+            Settings ›
+          </button>
+        </span>
       </div>
       <p className="mt-2 text-micro tracking-wider text-text-muted uppercase">
         {APP_VERSION}

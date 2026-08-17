@@ -103,3 +103,23 @@
   --duration-base: 220ms;
   --duration-slow: 380ms;
 }
+
+[data-theme="light"] {
+  --color-bg: #F4F5F8;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #ECEEF3;
+  --color-border: #DCDFE6;
+  --color-border-strong: #B9BEC9;
+  --color-accent: #14161C;
+  --color-text: #14161C;
+  --color-text-secondary: #5A5E68;
+  --color-text-muted: #9AA0AB;
+  --color-on-accent: #F7F9FF;
+  --color-alert: #B4453B;
+  --color-alert-surface: #F6DEDA;
+  --shadow-soft: 0 0 0 1px rgba(20,22,28,0.06), 0 4px 16px -6px rgba(20,22,28,0.18);
+  --shadow-strong: 0 0 0 1px rgba(20,22,28,0.10), 0 8px 28px -8px rgba(20,22,28,0.30), 0 2px 8px -2px rgba(20,22,28,0.18);
+  --shadow-ring: 0 6px 24px -4px rgba(20,22,28,0.25);
+  --shadow-alert: 0 0 0 1px rgba(180,69,59,0.30), 0 4px 20px -8px rgba(180,69,59,0.30);
+  --shadow-none: none;
+}

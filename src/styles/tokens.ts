@@ -43,6 +43,28 @@ export const colors = {
 } as const
 
 /**
+ * The light theme (product-owner request; the brief's Part 7 identity remains
+ * dark and dark stays the default). Same token names, resolved under
+ * [data-theme="light"] — components never know which theme is active. The
+ * accent inverts to ink: in light, interactive weight is carried by near-black
+ * fills and soft grey shadows rather than glow.
+ */
+export const lightColors: Record<keyof typeof colors, string> = {
+  bg: '#F4F5F8',
+  surface: '#FFFFFF',
+  surfaceRaised: '#ECEEF3',
+  border: '#DCDFE6',
+  borderStrong: '#B9BEC9',
+  accent: '#14161C',
+  text: '#14161C',
+  textSecondary: '#5A5E68',
+  textMuted: '#9AA0AB',
+  onAccent: '#F7F9FF',
+  alert: '#B4453B',
+  alertSurface: '#F6DEDA',
+} as const
+
+/**
  * The signature glow. Accent-coloured outer light that reads as if it is coming
  * *from* the element. Part 7 allows at most two glowing things per screen.
  */
@@ -56,6 +78,16 @@ export const glow = {
   ring: '0 0 32px -4px rgba(238,243,255,0.35)',
   /** Joint pain / still sore only. */
   alert: '0 0 0 1px rgba(194,90,80,0.30), 0 0 28px -8px rgba(194,90,80,0.35)',
+  none: 'none',
+} as const
+
+/** Light-mode shadows: ink-grey depth instead of emitted light. */
+export const lightGlow: Record<keyof typeof glow, string> = {
+  soft: '0 0 0 1px rgba(20,22,28,0.06), 0 4px 16px -6px rgba(20,22,28,0.18)',
+  strong:
+    '0 0 0 1px rgba(20,22,28,0.10), 0 8px 28px -8px rgba(20,22,28,0.30), 0 2px 8px -2px rgba(20,22,28,0.18)',
+  ring: '0 6px 24px -4px rgba(20,22,28,0.25)',
+  alert: '0 0 0 1px rgba(180,69,59,0.30), 0 4px 20px -8px rgba(180,69,59,0.30)',
   none: 'none',
 } as const
 
@@ -173,7 +205,9 @@ export const size = {
 
 export const tokens = {
   colors,
+  lightColors,
   glow,
+  lightGlow,
   space,
   measure,
   radius,

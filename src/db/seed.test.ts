@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './db'
 import { getTodayView } from './queries'
 import {
+  EXPECTED_LIBRARY_ONLY,
   EXPECTED_CARDIO_MINUTES,
   EXPECTED_EXERCISE_COUNT,
   EXPECTED_MESOCYCLE,
@@ -49,8 +50,51 @@ describe('the seeded program matches BRIEF.md Part 4', () => {
     await seedIfEmpty(SEEDED_ON)
   })
 
-  it('seeds exactly the 15 movements the brief lists', async () => {
+  it('seeds the 15 programmed movements plus the library-only catalog', async () => {
+    expect(await db.exercises.count()).toBe(
+      EXPECTED_EXERCISE_COUNT + EXPECTED_LIBRARY_ONLY.length,
+    )
+  })
+
+  it('ships the owner’s library exercises, attached to no day', async () => {
+    const names = new Set((await db.exercises.toArray()).map((e) => e.name))
+    for (const name of EXPECTED_LIBRARY_ONLY) {
+      expect(names.has(name), `${name} missing from library`).toBe(true)
+    }
+    const templates = await db.dayTemplates.toArray()
+    const templated = new Set(templates.flatMap((t) => t.exerciseIds))
+    for (const name of EXPECTED_LIBRARY_ONLY) {
+      const exercise = (await db.exercises.toArray()).find((e) => e.name === name)
+      expect(exercise && templated.has(exercise.id)).toBe(false)
+    }
+  })
+
+  it('tops up an already-seeded database with newly shipped library exercises', async () => {
+    // Simulate a phone seeded before the catalog existed.
+    const shipped = await db.exercises
+      .filter((e) => EXPECTED_LIBRARY_ONLY.includes(e.name))
+      .toArray()
+    await db.exercises.bulkDelete(shipped.map((e) => e.id))
     expect(await db.exercises.count()).toBe(EXPECTED_EXERCISE_COUNT)
+
+    // Next launch: seedIfEmpty on a seeded database adds the missing ones.
+    await seedIfEmpty(SEEDED_ON)
+    expect(await db.exercises.count()).toBe(
+      EXPECTED_EXERCISE_COUNT + EXPECTED_LIBRARY_ONLY.length,
+    )
+
+    // And an edited copy is never overwritten by the top-up.
+    const lateral = await db.exercises
+      .where('name')
+      .equals('Lateral raise dumbbells')
+      .first()
+    if (!lateral) throw new Error('missing')
+    await db.exercises.update(lateral.id, { repTargetMax: 25 })
+    await seedIfEmpty(SEEDED_ON)
+    expect((await db.exercises.get(lateral.id))?.repTargetMax).toBe(25)
+    expect(await db.exercises.count()).toBe(
+      EXPECTED_EXERCISE_COUNT + EXPECTED_LIBRARY_ONLY.length,
+    )
   })
 
   it('seeds three days, on the right weekdays, with the right names', async () => {

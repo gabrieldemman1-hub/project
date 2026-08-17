@@ -231,6 +231,52 @@ async function reanchorUntrainedMesocycle(now: Date): Promise<void> {
   })
 }
 
+/**
+ * Library-only movements (product owner's list): saved and ready to add to
+ * any day or block from Settings, attached to no day by default.
+ */
+export const EXTRA_LIBRARY: readonly SeedExercise[] = [
+  { name: 'Lateral raise dumbbells', type: 'isolation', muscleGroup: 'Shoulders', repTargetMin: 12, repTargetMax: 20 },
+  { name: 'Pec deck rear delt fly', type: 'isolation', muscleGroup: 'Shoulders', repTargetMin: 12, repTargetMax: 20 },
+  { name: 'Single arm tricep push down (handle)', type: 'isolation', muscleGroup: 'Triceps', repTargetMin: 10, repTargetMax: 15 },
+  { name: 'Single arm tricep push down (rope)', type: 'isolation', muscleGroup: 'Triceps', repTargetMin: 10, repTargetMax: 15 },
+  { name: 'Incline dumbbell press', type: 'compound', muscleGroup: 'Chest', repTargetMin: 8, repTargetMax: 12 },
+  { name: 'Incline barbell press smith machine', type: 'compound', muscleGroup: 'Chest', repTargetMin: 8, repTargetMax: 12 },
+]
+
+/**
+ * Adds any catalog exercise missing from the library, by name — the path by
+ * which an already-seeded phone receives newly shipped movements. Never
+ * touches an existing exercise, so edits made in Settings always survive.
+ */
+async function topUpLibrary(now: Date): Promise<void> {
+  const timestamp = now.getTime()
+  await db.transaction('rw', [db.exercises, db.muscleGroups], async () => {
+    const existingNames = new Set((await db.exercises.toArray()).map((e) => e.name))
+    const groups = await db.muscleGroups.toArray()
+    const groupIdByName = new Map(groups.map((g) => [g.name, g.id]))
+
+    for (const seed of EXTRA_LIBRARY) {
+      if (existingNames.has(seed.name)) continue
+      const muscleGroupId = groupIdByName.get(seed.muscleGroup)
+      if (!muscleGroupId) continue
+      await db.exercises.add({
+        id: newId(),
+        name: seed.name,
+        type: seed.type,
+        muscleGroupId,
+        repTargetMin: seed.repTargetMin,
+        repTargetMax: seed.repTargetMax,
+        weightIncrementLb: DEFAULT_WEIGHT_INCREMENT_LB,
+        restSeconds: defaultRestSeconds(seed.type),
+        isArchived: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+  })
+}
+
 function defaultRestSeconds(type: ExerciseType): number {
   return type === 'compound'
     ? DEFAULT_REST_COMPOUND_SECONDS
@@ -249,6 +295,7 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
   const alreadySeeded = await db.settings.get('app')
   if (alreadySeeded) {
     await reanchorUntrainedMesocycle(now)
+    await topUpLibrary(now)
     return false
   }
 
@@ -337,6 +384,28 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
 
       await db.muscleGroups.bulkAdd(muscleGroups)
       await db.exercises.bulkAdd(exercises)
+      // The library-only catalog ships on fresh installs too.
+      await db.exercises.bulkAdd(
+        EXTRA_LIBRARY.flatMap((seed) => {
+          const muscleGroupId = muscleGroupIdByName.get(seed.muscleGroup)
+          if (!muscleGroupId) return []
+          return [
+            {
+              id: newId(),
+              name: seed.name,
+              type: seed.type,
+              muscleGroupId,
+              repTargetMin: seed.repTargetMin,
+              repTargetMax: seed.repTargetMax,
+              weightIncrementLb: DEFAULT_WEIGHT_INCREMENT_LB,
+              restSeconds: defaultRestSeconds(seed.type),
+              isArchived: false,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            },
+          ]
+        }),
+      )
       await db.dayTemplates.bulkAdd(dayTemplates)
       await db.mesocycles.add({
         id: mesocycleId,

@@ -7,11 +7,12 @@ import { useEffect, useState } from 'react'
  * server that isn't there.
  */
 
-export type Route = '/' | '/session' | '/history'
+export type Route = '/' | '/session' | '/history' | '/settings'
 
 function currentRoute(): Route {
   if (window.location.hash === '#/session') return '/session'
   if (window.location.hash === '#/history') return '/history'
+  if (window.location.hash === '#/settings') return '/settings'
   return '/'
 }
 

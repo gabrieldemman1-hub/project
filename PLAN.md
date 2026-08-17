@@ -465,6 +465,35 @@ decision A-1 naturally. Menu placement is a deliberate exception to Part
 menu, not a primary action. Unit-tested at the data layer and proven in the
 browser gate.
 
+### Interlude: the owner's Settings batch (Phase 7 arriving early, in part)
+
+Four requests, one deliberate refusal, all shipped:
+
+- **Library + day editing.** Settings now edits each day's exercise list
+  (add from library, remove, reorder) and grows the library with new
+  movements. Six owner-requested exercises shipped into the library —
+  attached to no day until placed — via an idempotent top-up that also
+  reaches already-seeded phones and never overwrites edits.
+- **Multiple blocks.** Every mesocycle was already saved; Settings now shows
+  them all, newest first with session counts, plus a confirmed "Start a new
+  block now".
+- **Light mode.** A full light palette resolved through the same tokens
+  under [data-theme="light"] — components are theme-blind. Dark remains the
+  default and the design identity (Part 7); glow becomes ink-grey depth in
+  light.
+- **App lock, not a login.** The requested username/password was refused as
+  dishonest: with no server and a public repo, hardcoded credentials are
+  theater. The owner chose the offered alternative: a 4–8 digit PIN set
+  on-device, stored as a salted SHA-256 on the phone only, verified per
+  browser session, with an optional self-written hint (no recovery without
+  it — stated in the UI). One bug found by the proof: installing the lock
+  slammed the gate on the installing session; that session is now trusted.
+
+Gate: prove-settings drives library placement onto Day A, both theme
+switches with real repaint assertions, and the full lock cycle — fresh open
+gated, wrong PIN rejected, hint on request, right PIN in. 162 tests, all
+prior proofs still green.
+
 ### Phase 5+6 review, and what it changed
 
 The review recomputed the deload maths, traced every block-boundary edge

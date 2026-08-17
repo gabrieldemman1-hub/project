@@ -236,6 +236,124 @@ export async function startNewMesocycle(now: Date = new Date()): Promise<void> {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Settings: library, day templates, appearance, app lock
+// ---------------------------------------------------------------------------
+
+export interface NewExerciseInput {
+  name: string
+  type: 'compound' | 'isolation'
+  muscleGroupId: string
+  repTargetMin: number
+  repTargetMax: number
+}
+
+/** Adds a movement to the library (attached to no day until placed on one). */
+export async function addExerciseToLibrary(
+  input: NewExerciseInput,
+  now: Date = new Date(),
+): Promise<string> {
+  const name = input.name.trim()
+  if (!name) throw new Error('An exercise needs a name')
+  if (input.repTargetMin < 1 || input.repTargetMax < input.repTargetMin) {
+    throw new Error('Rep target range is invalid')
+  }
+  const timestamp = now.getTime()
+  const id = newId()
+
+  await db.transaction('rw', [db.exercises, db.muscleGroups], async () => {
+    if (!(await db.muscleGroups.get(input.muscleGroupId))) {
+      throw new Error('Unknown muscle group')
+    }
+    await db.exercises.add({
+      id,
+      name,
+      type: input.type,
+      muscleGroupId: input.muscleGroupId,
+      repTargetMin: input.repTargetMin,
+      repTargetMax: input.repTargetMax,
+      weightIncrementLb: 5,
+      restSeconds: input.type === 'compound' ? 150 : 120,
+      isArchived: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+  })
+  return id
+}
+
+/** Appends a library exercise to a day. Already present → no-op. */
+export async function addExerciseToDay(
+  dayTemplateId: string,
+  exerciseId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.transaction('rw', [db.dayTemplates], async () => {
+    const template = await db.dayTemplates.get(dayTemplateId)
+    if (!template || template.exerciseIds.includes(exerciseId)) return
+    await db.dayTemplates.update(dayTemplateId, {
+      exerciseIds: [...template.exerciseIds, exerciseId],
+      updatedAt: now.getTime(),
+    })
+  })
+}
+
+/** Removes an exercise from a day. History is untouched — only the plan. */
+export async function removeExerciseFromDay(
+  dayTemplateId: string,
+  exerciseId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.transaction('rw', [db.dayTemplates], async () => {
+    const template = await db.dayTemplates.get(dayTemplateId)
+    if (!template) return
+    await db.dayTemplates.update(dayTemplateId, {
+      exerciseIds: template.exerciseIds.filter((id) => id !== exerciseId),
+      updatedAt: now.getTime(),
+    })
+  })
+}
+
+/** Moves an exercise one place up or down within its day. */
+export async function moveExerciseInDay(
+  dayTemplateId: string,
+  exerciseId: string,
+  direction: 'up' | 'down',
+  now: Date = new Date(),
+): Promise<void> {
+  await db.transaction('rw', [db.dayTemplates], async () => {
+    const template = await db.dayTemplates.get(dayTemplateId)
+    if (!template) return
+    const ids = [...template.exerciseIds]
+    const from = ids.indexOf(exerciseId)
+    const to = direction === 'up' ? from - 1 : from + 1
+    if (from < 0 || to < 0 || to >= ids.length) return
+    const [moved] = ids.splice(from, 1)
+    if (moved === undefined) return
+    ids.splice(to, 0, moved)
+    await db.dayTemplates.update(dayTemplateId, {
+      exerciseIds: ids,
+      updatedAt: now.getTime(),
+    })
+  })
+}
+
+export async function setTheme(theme: 'dark' | 'light', now: Date = new Date()): Promise<void> {
+  await db.settings.update('app', { theme, updatedAt: now.getTime() })
+}
+
+/** Installs or replaces the app lock. Replacing requires the current PIN. */
+export async function setAppLock(
+  lock: import('./schema').AppLock,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.settings.update('app', { appLock: lock, updatedAt: now.getTime() })
+}
+
+export async function clearAppLock(now: Date = new Date()): Promise<void> {
+  await db.settings.update('app', { appLock: null, updatedAt: now.getTime() })
+}
+
 /**
  * Adds one planned set to today's prescription for an exercise — the explicit
  * "I want a bonus set" action. The engine's 2–5 clamp governs what it

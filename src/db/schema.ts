@@ -189,10 +189,28 @@ export interface Prescription {
   updatedAt: Timestamp
 }
 
+export type Theme = 'dark' | 'light'
+
+/**
+ * The on-device app lock. Honest about what it is: a deterrent against
+ * someone picking up the phone, not real security — only a salted SHA-256 of
+ * the PIN is stored, on this device only, and it never leaves it.
+ */
+export interface AppLock {
+  saltHex: string
+  hashHex: string
+  /** Optional plain-text reminder the user wrote for themselves. */
+  hint: string
+}
+
 /** Singleton row. */
 export interface AppSettings {
   id: 'app'
   activeMesocycleId: string
+  /** Absent on rows written before themes existed → dark. */
+  theme?: Theme
+  /** Absent or null → no lock. */
+  appLock?: AppLock | null
   /** Pre-fills the cardio screen with last session's settings. */
   lastCardio: CardioEntry
   defaultWeightIncrementLb: number

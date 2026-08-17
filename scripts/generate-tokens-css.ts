@@ -76,6 +76,18 @@ export function renderTokensCss(): string {
   }
 
   lines.push('}', '')
+
+  // The light theme: the same custom properties, re-resolved when the root
+  // carries data-theme="light". Utilities reference var(), so every component
+  // follows automatically.
+  lines.push('[data-theme="light"] {')
+  for (const [key, value] of Object.entries(tokens.lightColors)) {
+    lines.push(`  ${toCssVarName('color', key)}: ${value};`)
+  }
+  for (const [key, value] of Object.entries(tokens.lightGlow)) {
+    lines.push(`  ${toCssVarName('shadow', key)}: ${value};`)
+  }
+  lines.push('}', '')
   return lines.join('\n')
 }
 

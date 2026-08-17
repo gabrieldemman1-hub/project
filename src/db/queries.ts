@@ -294,6 +294,52 @@ async function assembleSessionView(session: Session): Promise<SessionView | null
   }
 }
 
+/** Everything the Settings screen needs, batched for live-query reactivity. */
+export interface SettingsView {
+  settings: AppSettings | undefined
+  templates: DayTemplate[]
+  /** Whole library, program exercises and extras alike, with group names. */
+  exercises: ExerciseView[]
+  muscleGroups: { id: string; name: string }[]
+  /** Newest first, with how many sessions each block actually holds. */
+  mesocycles: Array<Mesocycle & { sessionCount: number }>
+}
+
+export async function getSettingsView(): Promise<SettingsView> {
+  const [settings, templates, exercises, groups, mesocycles, sessions] =
+    await Promise.all([
+      db.settings.get('app'),
+      db.dayTemplates.toArray(),
+      db.exercises.toArray(),
+      db.muscleGroups.toArray(),
+      db.mesocycles.toArray(),
+      db.sessions.toArray(),
+    ])
+
+  const groupNameById = new Map(groups.map((g) => [g.id, g.name]))
+  const countByMeso = new Map<string, number>()
+  for (const session of sessions) {
+    countByMeso.set(session.mesocycleId, (countByMeso.get(session.mesocycleId) ?? 0) + 1)
+  }
+
+  return {
+    settings,
+    templates: templates.sort((a, b) => a.letter.localeCompare(b.letter)),
+    exercises: exercises
+      .map((exercise) => ({
+        ...exercise,
+        muscleGroupName: groupNameById.get(exercise.muscleGroupId) ?? '',
+      }))
+      .sort((a, b) => a.muscleGroupName.localeCompare(b.muscleGroupName) || a.name.localeCompare(b.name)),
+    muscleGroups: groups
+      .map((g) => ({ id: g.id, name: g.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    mesocycles: mesocycles
+      .map((m) => ({ ...m, sessionCount: countByMeso.get(m.id) ?? 0 }))
+      .sort((a, b) => b.startDate.localeCompare(a.startDate)),
+  }
+}
+
 /** One completed session's numbers for an exercise, charted over time. */
 export interface HistoryPoint {
   date: IsoDate

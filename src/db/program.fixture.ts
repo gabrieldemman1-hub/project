@@ -155,3 +155,16 @@ export const EXPECTED_PROGRAM: readonly ExpectedDay[] = [
 
 /** Part 4 lists 15 movements across the three days. */
 export const EXPECTED_EXERCISE_COUNT = 15
+
+/**
+ * The owner's library-only movements: saved, attached to no day, ready to be
+ * added to any workout or block from Settings. Transcribed from their message.
+ */
+export const EXPECTED_LIBRARY_ONLY: readonly string[] = [
+  'Lateral raise dumbbells',
+  'Pec deck rear delt fly',
+  'Single arm tricep push down (handle)',
+  'Single arm tricep push down (rope)',
+  'Incline dumbbell press',
+  'Incline barbell press smith machine',
+]
