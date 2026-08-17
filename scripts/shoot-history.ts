@@ -143,9 +143,20 @@ async function main(): Promise<void> {
       (await page.getByRole('button', { name: 'Incline hammer strength press' }).count()) === 1 &&
         (await page.getByRole('button', { name: 'Flat or low-incline machine press' }).count()) === 1,
     )
+    // Assert the actual computed number, not just the card title: the header
+    // of the weight card must read the latest session's top set — 185, the
+    // deload day — proving the math and the oldest-first ordering together.
+    const weightCard = page
+      .locator('section', { hasText: 'Top set weight' })
+      .first()
     check(
       'latest top-set weight reads 185 (the deload)',
-      (await page.getByText('Top set weight').count()) === 1,
+      (await weightCard.locator('.num').first().innerText()) === '185',
+    )
+    const volumeCard = page.locator('section', { hasText: 'Session volume' }).first()
+    check(
+      'latest volume reads 3700 (185×10 + 185×10)',
+      (await volumeCard.locator('.num').first().innerText()) === '3700',
     )
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

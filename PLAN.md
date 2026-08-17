@@ -440,6 +440,31 @@ screenshots/history-charts*.png
   history query briefly reintroduced a sequential late read before being
   folded back into the Promise.all batch the live-query rule demands.
 
+### Phase 5+6 review, and what it changed
+
+The review recomputed the deload maths, traced every block-boundary edge
+case, and verified the chart maths and the lazy chunk split. Fixed from its
+findings:
+
+1. A completed block could hide an unfinished workout: the home screen
+   showed "Start new block" before "Finish previous session", leaving a
+   half-done Saturday deload uncompletable until a new block was started.
+   Unfinished work now outranks everything.
+2. The history gate's key assertion was vacuous — it checked the chart
+   title existed rather than the number on it. It now reads the rendered
+   top-set weight and volume off the screen and asserts the exact values.
+3. startNewMesocycle now guards at the data layer: a block with no sessions
+   has nothing to close, so a double-fire is a no-op instead of minting an
+   empty junk mesocycle. Tested.
+4. getTodayView was quietly carrying the pre-batching shape that killed
+   live-query reactivity in Phase 4 — masked today, a live bug the moment
+   Phase 7's Settings edits exercises directly. Restructured into one
+   synchronous batch now.
+
+Accepted as-is: chart-internal geometry (tick font size, chart heights,
+margins) stays as literals — the token rule governs colour and layout
+spacing, not SVG plot internals.
+
 ### Phase 3+4 review, and what it changed
 
 The independent review recomputed the whole engine against the brief —

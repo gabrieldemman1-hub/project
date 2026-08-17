@@ -41,6 +41,14 @@ export async function getDayTemplates(): Promise<DayTemplate[]> {
   return templates.sort((a, b) => a.letter.localeCompare(b.letter))
 }
 
+/**
+ * An exercise with its muscle group's display name resolved, so components
+ * never have to join tables themselves.
+ */
+export interface ExerciseView extends Exercise {
+  muscleGroupName: string
+}
+
 /** Resolves an ordered list of exercise ids, dropping any that no longer exist. */
 export async function getExercisesByIds(
   ids: readonly string[],
@@ -51,35 +59,6 @@ export async function getExercisesByIds(
   return found.filter((exercise): exercise is Exercise => exercise !== undefined)
 }
 
-/**
- * An exercise with its muscle group's display name resolved, so components
- * never have to join tables themselves.
- */
-export interface ExerciseView extends Exercise {
-  muscleGroupName: string
-}
-
-async function withMuscleGroupNames(
-  exercises: readonly Exercise[],
-): Promise<ExerciseView[]> {
-  if (exercises.length === 0) return []
-
-  const groups = await db.muscleGroups.bulkGet(
-    Array.from(new Set(exercises.map((exercise) => exercise.muscleGroupId))),
-  )
-  const nameById = new Map(
-    groups
-      .filter((group) => group !== undefined)
-      .map((group) => [group.id, group.name]),
-  )
-
-  return exercises.map((exercise) => ({
-    ...exercise,
-    // A missing group means the row was deleted out from under the exercise;
-    // showing nothing is better than showing a raw UUID.
-    muscleGroupName: nameById.get(exercise.muscleGroupId) ?? '',
-  }))
-}
 
 export async function getSessionForDate(
   date: IsoDate,
@@ -404,21 +383,45 @@ export async function getHistoryView(exerciseId: string | null): Promise<History
 }
 
 export async function getTodayView(date: IsoDate): Promise<TodayView> {
-  const [templates, mesocycle, session, sessions, settings] = await Promise.all([
-    getDayTemplates(),
-    getActiveMesocycle(),
-    getSessionForDate(date),
-    db.sessions.toArray(),
-    getSettings(),
-  ])
+  // One synchronous batch — the same load-bearing shape as
+  // assembleSessionView below: reads launched after an await are not
+  // reliably tracked by live queries, and this view must wake on writes to
+  // every one of these tables (a Settings edit to an exercise included).
+  const [allTemplates, allMesocycles, sessions, settings, allExercises, allGroups, allSets] =
+    await Promise.all([
+      db.dayTemplates.toArray(),
+      db.mesocycles.toArray(),
+      db.sessions.toArray(),
+      db.settings.get('app'),
+      db.exercises.toArray(),
+      db.muscleGroups.toArray(),
+      db.sets.toArray(),
+    ])
+
+  const templates = allTemplates.sort((a, b) => a.letter.localeCompare(b.letter))
+  const mesocycle = settings
+    ? allMesocycles.find((m) => m.id === settings.activeMesocycleId)
+    : undefined
+  const session = sessions.find((s) => s.date === date)
 
   const unfinishedSession = sessions
     .filter((s) => s.status === 'in_progress' && s.date < date)
     .sort((a, b) => b.date.localeCompare(a.date))[0]
 
   const template = templateForDate(templates, date)
-  const exercises = template
-    ? await withMuscleGroupNames(await getExercisesByIds(template.exerciseIds))
+  const exerciseById = new Map(allExercises.map((exercise) => [exercise.id, exercise]))
+  const groupNameById = new Map(allGroups.map((group) => [group.id, group.name]))
+  const exercises: ExerciseView[] = template
+    ? template.exerciseIds.flatMap((id) => {
+        const exercise = exerciseById.get(id)
+        if (!exercise) return []
+        return [
+          {
+            ...exercise,
+            muscleGroupName: groupNameById.get(exercise.muscleGroupId) ?? '',
+          },
+        ]
+      })
     : []
 
   return {
@@ -430,7 +433,7 @@ export async function getTodayView(date: IsoDate): Promise<TodayView> {
     session,
     unfinishedSession,
     setsLoggedToday: session
-      ? await db.sets.where('sessionId').equals(session.id).count()
+      ? allSets.filter((set) => set.sessionId === session.id).length
       : 0,
     cardioMinutes: settings?.lastCardio.durationMin ?? DEFAULT_CARDIO.durationMin,
     streak: currentStreak(templates, sessions, date),

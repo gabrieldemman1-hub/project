@@ -199,6 +199,13 @@ function TrainingDay({
           <Button variant="quiet" onClick={() => nav.setOffset(0)}>
             Back to today
           </Button>
+        ) : resumingOld ? (
+          // An unfinished workout outranks everything — even a completed
+          // block. Without this ordering, week 7 arriving would hide the only
+          // path to finishing Saturday's half-done deload session.
+          <Button onClick={() => navigate('/session')}>
+            Finish previous session
+          </Button>
         ) : position?.isComplete && !session ? (
           <StartNewBlock />
         ) : completed ? (
@@ -309,12 +316,13 @@ function RestDay({ view, nav }: { view: TodayView; nav: DayNavState }) {
           <Button variant="quiet" onClick={() => nav.setOffset(0)}>
             Back to today
           </Button>
-        ) : view.position?.isComplete ? (
-          <StartNewBlock />
         ) : unfinishedSession ? (
+          // Ordered before the block-complete state — see TrainingDay.
           <Button onClick={() => navigate('/session')}>
             Finish previous session
           </Button>
+        ) : view.position?.isComplete ? (
+          <StartNewBlock />
         ) : undefined
       }
     >

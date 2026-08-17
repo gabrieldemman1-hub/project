@@ -169,8 +169,26 @@ describe('the six-week cycle, simulated end to end', () => {
     expect(thursday.isDeload).toBe(true)
     await generatePrescriptions(thursday.id)
     const rx = await rxFor(thursday.id, exerciseId)
-    expect(rx.plannedSets).toBe(2) // floor(4/2), not floor(2/2)→clamp
-    expect(rx.plannedWeightLb).toBe(165) // from 185, not 165 − 10%
+    // Set count alone cannot discriminate the source (every 2–5 set history
+    // halves into 2) — the weight is the discriminating assertion: 165 comes
+    // from week five's 185, where basing on Monday's deload would give
+    // 165 − 10% → 150.
+    expect(rx.plannedSets).toBe(2)
+    expect(rx.plannedWeightLb).toBe(165)
+  })
+
+  it('starting a block twice in a row is a no-op, never a junk block', async () => {
+    await trainDayA('2026-08-17', { weightLb: 185, reps: 10, sets: 3, rir: '0' })
+
+    await startNewMesocycle(new Date(2026, 8, 28))
+    const after = await db.mesocycles.toArray()
+    expect(after).toHaveLength(2)
+
+    // The double-fire: the fresh block has no sessions, so there is nothing
+    // to close and nothing new is created.
+    await startNewMesocycle(new Date(2026, 8, 28))
+    expect(await db.mesocycles.count()).toBe(2)
+    expect((await db.mesocycles.where('status').equals('active').toArray())).toHaveLength(1)
   })
 
   it('the never-increase-twice guard resets across the block boundary', async () => {

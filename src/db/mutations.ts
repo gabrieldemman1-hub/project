@@ -204,9 +204,18 @@ export async function completeSession(
 export async function startNewMesocycle(now: Date = new Date()): Promise<void> {
   const timestamp = now.getTime()
 
-  await db.transaction('rw', [db.mesocycles, db.settings], async () => {
+  await db.transaction('rw', [db.mesocycles, db.settings, db.sessions], async () => {
     const settings = await db.settings.get('app')
     if (!settings) throw new Error('Database has not been seeded')
+
+    // Guard at the data layer, not just the button: a block containing no
+    // sessions has nothing to close, so a double-fire (or any future caller)
+    // is a no-op instead of minting an empty junk mesocycle.
+    const trained = await db.sessions
+      .where('mesocycleId')
+      .equals(settings.activeMesocycleId)
+      .count()
+    if (trained === 0) return
 
     await db.mesocycles.update(settings.activeMesocycleId, {
       status: 'completed',
