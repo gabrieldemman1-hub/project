@@ -450,6 +450,21 @@ restored. A correction starts no rest timer and asks no feedback questions.
 Browser-proven: edit 200 × 8 to 200 × 7, overwritten not duplicated, action
 returns to the next set.
 
+### Interlude: deliberate set control (product owner request, from real use)
+
+The exercise screen gained a ⋯ menu in the top right with two actions: "Add
+a set" grows today's plan by one, and "Skip remaining sets" (reading "Skip
+exercise" when nothing is logged) shrinks the plan to the work already done
+and moves on — collecting the feedback questions first when sets were
+logged. With the plan complete, the primary button now honestly reads "Next
+exercise ›" instead of silently inviting a set nobody prescribed; bonus sets
+are always an explicit Add. Progression is untouched either way — the engine
+reads performed sets, so a skipped tail or an added bonus flows through
+decision A-1 naturally. Menu placement is a deliberate exception to Part
+7's top-corner rule at the owner's explicit request; it is an overflow
+menu, not a primary action. Unit-tested at the data layer and proven in the
+browser gate.
+
 ### Phase 5+6 review, and what it changed
 
 The review recomputed the deload maths, traced every block-boundary edge

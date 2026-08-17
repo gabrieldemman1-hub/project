@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { db } from './db'
 import {
+  addPlannedSet,
+  capPlannedSetsAtLogged,
   completeSession,
   generatePrescriptions,
   saveExerciseFeedback,
@@ -196,6 +198,40 @@ describe('generatePrescriptions', () => {
     expect(rx.plannedWeightLb).toBe(135) // 150 − 10%
     expect(rx.targetRir).toBe(4)
     expect(rx.loadAction).toBe('hold') // RIR 3+ ignored on a deload
+  })
+
+  it('adds and caps planned sets mid-session, without touching progression inputs', async () => {
+    const session = await startSession(MONDAY)
+    await answerSoreness(session, 'none')
+    await generatePrescriptions(session.id)
+    const template = await templateFor(session)
+    const [pressId] = template.exerciseIds
+    if (!pressId) throw new Error('no exercise')
+
+    // Add: 3 → 4.
+    await addPlannedSet(session.id, pressId)
+    expect((await prescriptionFor(session.id, pressId)).plannedSets).toBe(4)
+
+    // Two sets logged, then skip the rest: the plan shrinks to the work done.
+    await saveSet({ sessionId: session.id, exerciseId: pressId, setIndex: 0, weightLb: 185, reps: 10 })
+    await saveSet({ sessionId: session.id, exerciseId: pressId, setIndex: 1, weightLb: 185, reps: 9 })
+    await capPlannedSetsAtLogged(session.id, pressId)
+    expect((await prescriptionFor(session.id, pressId)).plannedSets).toBe(2)
+
+    // Skipping with nothing logged caps at zero — a fully skipped exercise.
+    const [, flatId] = template.exerciseIds
+    if (!flatId) throw new Error('no second exercise')
+    await capPlannedSetsAtLogged(session.id, flatId)
+    expect((await prescriptionFor(session.id, flatId)).plannedSets).toBe(0)
+
+    // The engine's next-session input is the performed sets, not the plan —
+    // complete the session and confirm Thursday bases on 2 real sets.
+    await saveExerciseFeedback(session.id, pressId, { pump: 'moderate', rir: '0', jointPain: null })
+    await completeSession(session.id, { durationMin: 45, inclinePct: 10, speedMph: 3 })
+    const thursday = await startSession('2026-08-20')
+    await answerSoreness(thursday, 'a_little')
+    await generatePrescriptions(thursday.id)
+    expect((await prescriptionFor(thursday.id, pressId)).plannedSets).toBe(2)
   })
 
   it('exposes prompts and prescriptions through the session view', async () => {

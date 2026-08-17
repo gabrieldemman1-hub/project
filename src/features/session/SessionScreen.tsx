@@ -14,6 +14,8 @@ import {
   type SessionView,
 } from '../../db/queries'
 import {
+  addPlannedSet,
+  capPlannedSetsAtLogged,
   completeSession,
   generatePrescriptions,
   saveExerciseFeedback,
@@ -281,6 +283,9 @@ function ExercisePane({
   const nextSetIndex = sets.length
   const lastLogged = sets[sets.length - 1]
   const prevForNext = previous[nextSetIndex]
+  /** Every planned set is in the book (and nothing is mid-correction). */
+  const planDone =
+    prescription !== undefined && nextSetIndex >= prescription.plannedSets
 
   // Starting numbers, best signal first: the set just done, then the engine's
   // prescription, then last session, then the rep floor.
@@ -302,6 +307,7 @@ function ExercisePane({
   const [saving, setSaving] = useState(false)
   /** True once the user has adjusted a stepper — their number then wins. */
   const [touched, setTouched] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   /**
    * A logged set being corrected: tapping its row loads it into the steppers,
    * stashing the in-progress next-set draft to restore afterwards. Tapping
@@ -395,27 +401,86 @@ function ExercisePane({
   return (
     <Screen
       action={
-        <Button onClick={() => void logSet()} disabled={saving || weight <= 0 || reps <= 0}>
-          {saving
-            ? 'Saving…'
-            : editing
-              ? `Save set ${editing.index + 1}`
-              : prescription && nextSetIndex < prescription.plannedSets
-                ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
-                : `Log set ${nextSetIndex + 1}`}
-        </Button>
+        planDone && !editing ? (
+          // The plan is complete: the honest action is moving on, not a
+          // silent invitation to a set nobody prescribed. Bonus sets are a
+          // deliberate "Add a set" in the ⋯ menu.
+          <Button onClick={onNext}>{isLast ? 'Cardio ›' : 'Next exercise ›'}</Button>
+        ) : (
+          <Button onClick={() => void logSet()} disabled={saving || weight <= 0 || reps <= 0}>
+            {saving
+              ? 'Saving…'
+              : editing
+                ? `Save set ${editing.index + 1}`
+                : prescription
+                  ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
+                  : `Log set ${nextSetIndex + 1}`}
+          </Button>
+        )
       }
     >
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} className="flex min-h-full flex-col">
-        <header className="flex items-baseline justify-between gap-4">
+        <header className="flex items-center justify-between gap-4">
           <p className="text-xs tracking-wider text-text-secondary uppercase">
             Exercise <span className="num text-text">{position + 1}</span> of{' '}
             <span className="num text-text">{total}</span>
           </p>
-          <p className="shrink-0 text-xs tracking-wider text-text-secondary uppercase">
-            {exercise.muscleGroupName}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="shrink-0 text-xs tracking-wider text-text-secondary uppercase">
+              {exercise.muscleGroupName}
+            </p>
+            {prescription ? (
+              <button
+                type="button"
+                aria-label="Exercise options"
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="num min-h-touch-min min-w-touch-min rounded-md border border-border bg-surface-raised text-base text-text-secondary"
+              >
+                ⋯
+              </button>
+            ) : null}
+          </div>
         </header>
+
+        {/* The per-exercise menu (product owner request): deliberate set
+            adjustments live here rather than the app silently inviting a
+            "Log set 4" after a 3-set plan. */}
+        {menuOpen && prescription ? (
+          <>
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => setMenuOpen(false)}
+              className="fixed inset-0 z-40"
+            />
+            <div
+              className="fixed right-6 z-50 flex w-56 flex-col rounded-md border border-border-strong bg-surface-raised shadow-soft"
+              style={{ top: 'calc(var(--safe-top) + var(--spacing-16))' }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false)
+                  void addPlannedSet(sessionId, exercise.id)
+                }}
+                className="min-h-touch-comfortable px-4 text-left text-sm text-text"
+              >
+                Add a set
+              </button>
+              <button
+                type="button"
+                disabled={sets.length >= prescription.plannedSets && sets.length > 0}
+                onClick={() => {
+                  setMenuOpen(false)
+                  void capPlannedSetsAtLogged(sessionId, exercise.id).then(onNext)
+                }}
+                className="min-h-touch-comfortable border-t border-border px-4 text-left text-sm text-text disabled:text-text-muted"
+              >
+                {sets.length === 0 ? 'Skip exercise' : 'Skip remaining sets'}
+              </button>
+            </div>
+          </>
+        ) : null}
 
         <h1 className="mt-6 text-xl leading-snug text-balance text-text">
           {exercise.name}

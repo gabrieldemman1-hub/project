@@ -236,6 +236,59 @@ export async function startNewMesocycle(now: Date = new Date()): Promise<void> {
   })
 }
 
+/**
+ * Adds one planned set to today's prescription for an exercise — the explicit
+ * "I want a bonus set" action. The engine's 2–5 clamp governs what it
+ * *prescribes*; a deliberate mid-session addition is the user's call.
+ */
+export async function addPlannedSet(
+  sessionId: string,
+  exerciseId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.transaction('rw', [db.prescriptions], async () => {
+    const rx = await db.prescriptions
+      .where('sessionId')
+      .equals(sessionId)
+      .filter((row) => row.exerciseId === exerciseId)
+      .first()
+    if (!rx) return
+    await db.prescriptions.update(rx.id, {
+      plannedSets: rx.plannedSets + 1,
+      updatedAt: now.getTime(),
+    })
+  })
+}
+
+/**
+ * Ends the exercise at however many sets are already logged: the plan shrinks
+ * to the work done (possibly zero — a fully skipped exercise). Progression is
+ * untouched by this: the engine reads what was actually performed, so next
+ * session bases on the real sets, exactly as decision A-1 intends.
+ */
+export async function capPlannedSetsAtLogged(
+  sessionId: string,
+  exerciseId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.transaction('rw', [db.prescriptions, db.sets], async () => {
+    const rx = await db.prescriptions
+      .where('sessionId')
+      .equals(sessionId)
+      .filter((row) => row.exerciseId === exerciseId)
+      .first()
+    if (!rx) return
+    const logged = await db.sets
+      .where('[sessionId+exerciseId]')
+      .equals([sessionId, exerciseId])
+      .count()
+    await db.prescriptions.update(rx.id, {
+      plannedSets: logged,
+      updatedAt: now.getTime(),
+    })
+  })
+}
+
 /** Records one soreness answer. Re-answering a group overwrites, not duplicates. */
 export async function saveSorenessFeedback(
   sessionId: string,

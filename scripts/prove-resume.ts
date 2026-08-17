@@ -243,7 +243,31 @@ async function main(): Promise<void> {
     await revived.getByRole('button', { name: 'Skip' }).click()
     await revived.getByRole('button', { name: 'Dismiss' }).click()
 
-    for (let i = 0; i < 4; i += 1) {
+    console.log('\nSET MENU — the plan changes deliberately, never silently')
+    check(
+      'with the plan complete, the action is Next exercise — no silent set 4',
+      (await revived.getByRole('button', { name: 'Next exercise ›' }).count()) === 1 &&
+        (await revived.getByRole('button', { name: /^Log set 4/ }).count()) === 0,
+    )
+    await revived.getByRole('button', { name: 'Next exercise ›' }).click()
+    await revived.getByText('Exercise 3 of 5').waitFor()
+
+    // Add a set from the ⋯ menu: 3 planned becomes 4.
+    await revived.getByRole('button', { name: 'Exercise options' }).click()
+    await revived.getByRole('button', { name: 'Add a set' }).click()
+    await revived.getByRole('button', { name: 'Log set 1 of 4' }).waitFor()
+    check('Add a set: the plan grows 3 → 4', true)
+
+    // Skip the whole exercise: no sets logged, so no feedback questions.
+    await revived.getByRole('button', { name: 'Exercise options' }).click()
+    await revived.getByRole('button', { name: 'Skip exercise' }).click()
+    await revived.getByText('Exercise 4 of 5').waitFor()
+    check(
+      'Skip exercise moves on without feedback questions',
+      (await revived.getByText('How was the pump?').count()) === 0,
+    )
+
+    for (let i = 0; i < 2; i += 1) {
       await revived.getByRole('button', { name: /Next ›|Cardio ›/ }).click()
     }
     await revived.getByText('Incline walk').waitFor()
