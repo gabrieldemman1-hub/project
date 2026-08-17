@@ -45,11 +45,16 @@ jobs:
           # Must match the repository name — GitHub Pages serves from /<repo>/.
           VITE_BASE_PATH: /project/
 
-      # enablement turns Pages on via the API using the pages:write permission
-      # above, so the site does not have to be switched on by hand in settings.
+      # Pages has to be switched on once by hand:
+      #   Settings → Pages → Build and deployment → Source: GitHub Actions
+      # This step fails with "Get Pages site failed" until that is done.
+      #
+      # `enablement: true` looks like it would automate this, but it does not:
+      # creating a Pages site needs admin rights, and GITHUB_TOKEN is refused
+      # with "Resource not accessible by integration" even with pages:write.
+      # Automating it would need a personal access token, which is a worse
+      # trade than one click.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
