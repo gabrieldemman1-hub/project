@@ -18,7 +18,7 @@ function template(letter: 'A' | 'B' | 'C', weekdays: number[]): DayTemplate {
     name: letter,
     weekdays,
     exerciseIds: [],
-    sorenessPrompts: [],
+    sorenessPromptGroupIds: [],
     createdAt: 0,
     updatedAt: 0,
   }
@@ -164,6 +164,31 @@ describe('currentStreak', () => {
   it('does not count an in-progress session as completed', () => {
     const sessions = [session('2026-08-17'), session('2026-08-18', 'in_progress')]
     expect(currentStreak(TEMPLATES, sessions, '2026-08-18')).toBe(1)
+  })
+
+  it('breaks immediately when today is the day that was skipped', () => {
+    // Deciding to skip is a decision; not having trained yet is not. The grace
+    // given to an unlogged today must not extend to a day explicitly skipped.
+    const sessions = [
+      session('2026-08-17'),
+      session('2026-08-18'),
+      session('2026-08-19', 'skipped'),
+    ]
+    expect(currentStreak(TEMPLATES, sessions, '2026-08-19')).toBe(0)
+  })
+
+  it('still grants the grace when today is merely in progress', () => {
+    const sessions = [
+      session('2026-08-17'),
+      session('2026-08-18'),
+      session('2026-08-19', 'in_progress'),
+    ]
+    expect(currentStreak(TEMPLATES, sessions, '2026-08-19')).toBe(2)
+  })
+
+  it('breaks when yesterday was skipped and today is a rest day', () => {
+    const sessions = [session('2026-08-21'), session('2026-08-22', 'skipped')]
+    expect(currentStreak(TEMPLATES, sessions, '2026-08-23')).toBe(0)
   })
 
   it('survives today not being logged yet', () => {

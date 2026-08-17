@@ -7,6 +7,7 @@ import type {
   ExerciseFeedback,
   LoggedSet,
   Mesocycle,
+  MuscleGroup,
   Prescription,
   Session,
   SorenessFeedback,
@@ -19,6 +20,7 @@ import type {
  * mutations.ts, per CLAUDE.md.
  */
 export class WorkoutDatabase extends Dexie {
+  muscleGroups!: EntityTable<MuscleGroup, 'id'>
   exercises!: EntityTable<Exercise, 'id'>
   dayTemplates!: EntityTable<DayTemplate, 'id'>
   mesocycles!: EntityTable<Mesocycle, 'id'>
@@ -36,13 +38,14 @@ export class WorkoutDatabase extends Dexie {
     // most indexes because it is read on every screen; everything else stays
     // lean so writes during a session are as fast as possible.
     this.version(1).stores({
-      exercises: 'id, name, muscleGroup, isArchived',
+      muscleGroups: 'id, name',
+      exercises: 'id, name, muscleGroupId, isArchived',
       dayTemplates: 'id, letter, *weekdays',
       mesocycles: 'id, startDate, status',
       sessions: 'id, date, status, mesocycleId, dayTemplateId, [status+date]',
       sets: 'id, sessionId, exerciseId, loggedAt, [sessionId+exerciseId]',
       exerciseFeedback: 'id, sessionId, exerciseId, [sessionId+exerciseId]',
-      sorenessFeedback: 'id, sessionId, muscleGroup',
+      sorenessFeedback: 'id, sessionId, muscleGroupId',
       prescriptions:
         'id, sessionId, exerciseId, mesocycleId, [exerciseId+createdAt]',
       settings: 'id',

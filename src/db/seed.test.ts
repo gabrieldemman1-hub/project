@@ -3,12 +3,15 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from './db'
 import { getTodayView } from './queries'
 import {
-  DEFAULT_REST_COMPOUND_SECONDS,
-  DEFAULT_REST_ISOLATION_SECONDS,
-  DEFAULT_WEIGHT_INCREMENT_LB,
-  SEED_DAYS,
-  seedIfEmpty,
-} from './seed'
+  EXPECTED_CARDIO_MINUTES,
+  EXPECTED_EXERCISE_COUNT,
+  EXPECTED_MESOCYCLE,
+  EXPECTED_PROGRAM,
+  EXPECTED_REST_SECONDS,
+  EXPECTED_WEIGHT_INCREMENT_LB,
+} from './program.fixture'
+import { SEED_MUSCLE_GROUPS, seedIfEmpty } from './seed'
+import type { Exercise } from './schema'
 
 const SEEDED_ON = new Date(2026, 7, 19) // Wednesday 19 August 2026
 
@@ -17,28 +20,167 @@ beforeEach(async () => {
   await db.open()
 })
 
-describe('seedIfEmpty', () => {
-  it('writes the Part 4 program on an empty database', async () => {
-    expect(await seedIfEmpty(SEEDED_ON)).toBe(true)
+/** Resolves the seeded exercises for a day, in template order, with group names. */
+async function exercisesForDay(
+  letter: 'A' | 'B' | 'C',
+): Promise<Array<Exercise & { muscleGroupName: string }>> {
+  const template = await db.dayTemplates.where('letter').equals(letter).first()
+  if (!template) throw new Error(`Day ${letter} was not seeded`)
 
-    const expectedExerciseCount = SEED_DAYS.reduce(
-      (total, day) => total + day.exercises.length,
-      0,
-    )
-    expect(await db.exercises.count()).toBe(expectedExerciseCount)
-    expect(await db.dayTemplates.count()).toBe(3)
-    expect(await db.mesocycles.count()).toBe(1)
-    expect(await db.settings.count()).toBe(1)
+  const exercises = await db.exercises.bulkGet(template.exerciseIds)
+  const groups = await db.muscleGroups.toArray()
+  const nameById = new Map(groups.map((group) => [group.id, group.name]))
+
+  return exercises.map((exercise, index) => {
+    if (!exercise) throw new Error(`Day ${letter} exercise ${index} is dangling`)
+    return {
+      ...exercise,
+      muscleGroupName: nameById.get(exercise.muscleGroupId) ?? '',
+    }
+  })
+}
+
+// These assert against src/db/program.fixture.ts — the brief transcribed by
+// hand — rather than against the constants the seed is built from, so a wrong
+// name, a flipped compound/isolation classification or a bad rep target fails
+// here instead of reaching the gym.
+describe('the seeded program matches BRIEF.md Part 4', () => {
+  beforeEach(async () => {
+    await seedIfEmpty(SEEDED_ON)
   })
 
-  it('is idempotent — a second call writes nothing', async () => {
+  it('seeds exactly the 15 movements the brief lists', async () => {
+    expect(await db.exercises.count()).toBe(EXPECTED_EXERCISE_COUNT)
+  })
+
+  it('seeds three days, on the right weekdays, with the right names', async () => {
+    const templates = await db.dayTemplates.toArray()
+    expect(templates).toHaveLength(3)
+
+    for (const expected of EXPECTED_PROGRAM) {
+      const template = templates.find((t) => t.letter === expected.letter)
+      expect(template, `Day ${expected.letter} missing`).toBeDefined()
+      expect(template?.name).toBe(expected.name)
+      expect(template?.weekdays).toEqual(expected.weekdays)
+    }
+  })
+
+  for (const day of EXPECTED_PROGRAM) {
+    describe(`Day ${day.letter} — ${day.name}`, () => {
+      it('has the brief’s exercises, in the brief’s order', async () => {
+        const seeded = await exercisesForDay(day.letter)
+        expect(seeded.map((exercise) => exercise.name)).toEqual(
+          day.exercises.map((exercise) => exercise.name),
+        )
+      })
+
+      for (const [index, expected] of day.exercises.entries()) {
+        it(`${expected.name}: ${expected.type}, ${expected.muscleGroup}, ${expected.reps[0]}–${expected.reps[1]} reps`, async () => {
+          const seeded = (await exercisesForDay(day.letter))[index]
+          expect(seeded).toBeDefined()
+          expect(seeded?.name).toBe(expected.name)
+          expect(seeded?.type).toBe(expected.type)
+          expect(seeded?.muscleGroupName).toBe(expected.muscleGroup)
+          expect(seeded?.repTargetMin).toBe(expected.reps[0])
+          expect(seeded?.repTargetMax).toBe(expected.reps[1])
+          // Part 4: compound 150s, isolation 120s, 5 lb increment.
+          expect(seeded?.restSeconds).toBe(EXPECTED_REST_SECONDS[expected.type])
+          expect(seeded?.weightIncrementLb).toBe(EXPECTED_WEIGHT_INCREMENT_LB)
+        })
+      }
+    })
+  }
+
+  it('sets up the mesocycle as five accumulation weeks plus a deload', async () => {
+    const mesocycle = await db.mesocycles.toCollection().first()
+    expect(mesocycle?.totalWeeks).toBe(EXPECTED_MESOCYCLE.totalWeeks)
+    expect(mesocycle?.deloadWeek).toBe(EXPECTED_MESOCYCLE.deloadWeek)
+    expect(mesocycle?.status).toBe('active')
+    // Started on the Monday of the seeding week.
+    expect(mesocycle?.startDate).toBe('2026-08-17')
+  })
+
+  it('pre-fills cardio with the brief’s 45 minutes', async () => {
+    const settings = await db.settings.get('app')
+    expect(settings?.lastCardio.durationMin).toBe(EXPECTED_CARDIO_MINUTES)
+  })
+
+  it('points settings at the mesocycle it created', async () => {
+    const settings = await db.settings.get('app')
+    const mesocycle = await db.mesocycles.toCollection().first()
+    expect(settings?.activeMesocycleId).toBe(mesocycle?.id)
+  })
+})
+
+describe('muscle groups', () => {
+  beforeEach(async () => {
     await seedIfEmpty(SEEDED_ON)
+  })
+
+  it('gives every exercise a resolvable muscle group', async () => {
+    const exercises = await db.exercises.toArray()
+    const groupIds = new Set((await db.muscleGroups.toArray()).map((g) => g.id))
+
+    for (const exercise of exercises) {
+      expect(
+        groupIds.has(exercise.muscleGroupId),
+        `${exercise.name} points at a missing muscle group`,
+      ).toBe(true)
+    }
+  })
+
+  it('covers every exercise by a prompt or an inherited one', async () => {
+    // PLAN.md §2.3 trims the prompt list, so any group left out must inherit
+    // from one that is prompted for — otherwise an exercise gets no soreness
+    // answer at all and the engine has nothing to work from.
+    const groups = await db.muscleGroups.toArray()
+    const groupById = new Map(groups.map((group) => [group.id, group]))
+
+    for (const template of await db.dayTemplates.toArray()) {
+      const prompted = new Set(template.sorenessPromptGroupIds)
+      const exercises = await db.exercises.bulkGet(template.exerciseIds)
+
+      for (const exercise of exercises) {
+        if (!exercise) throw new Error('dangling exercise')
+        const group = groupById.get(exercise.muscleGroupId)
+        const covered =
+          prompted.has(exercise.muscleGroupId) ||
+          (group?.inheritsFromId != null && prompted.has(group.inheritsFromId))
+
+        expect(
+          covered,
+          `Day ${template.letter}: "${exercise.name}" (${group?.name}) has no soreness answer`,
+        ).toBe(true)
+      }
+    }
+  })
+
+  it('resolves every declared inheritance to a real group', async () => {
+    const groups = await db.muscleGroups.toArray()
+    const byId = new Map(groups.map((group) => [group.id, group]))
+
+    const inheriting = groups.filter((group) => group.inheritsFromId !== null)
+    // Guards the test itself: if nothing inherits, the check above is vacuous.
+    expect(inheriting.length).toBe(
+      SEED_MUSCLE_GROUPS.filter((group) => group.inheritsFrom !== null).length,
+    )
+
+    for (const group of inheriting) {
+      expect(byId.has(group.inheritsFromId ?? '')).toBe(true)
+    }
+  })
+})
+
+describe('seedIfEmpty', () => {
+  it('is idempotent — a second call writes nothing', async () => {
+    expect(await seedIfEmpty(SEEDED_ON)).toBe(true)
     const before = await db.exercises.count()
 
     expect(await seedIfEmpty(SEEDED_ON)).toBe(false)
 
     expect(await db.exercises.count()).toBe(before)
     expect(await db.dayTemplates.count()).toBe(3)
+    expect(await db.muscleGroups.count()).toBe(SEED_MUSCLE_GROUPS.length)
   })
 
   it('never overwrites an edited exercise on relaunch', async () => {
@@ -53,78 +195,42 @@ describe('seedIfEmpty', () => {
     expect((await db.exercises.get(legPress.id))?.weightIncrementLb).toBe(15)
   })
 
-  it('gives every exercise a UUID primary key so a sync layer can be added later', async () => {
+  it('gives every row a UUID primary key so a sync layer can be added later', async () => {
     await seedIfEmpty(SEEDED_ON)
-    const exercises = await db.exercises.toArray()
-
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    for (const exercise of exercises) {
-      expect(exercise.id).toMatch(uuid)
-    }
-    expect(new Set(exercises.map((e) => e.id)).size).toBe(exercises.length)
+
+    const ids = [
+      ...(await db.exercises.toArray()),
+      ...(await db.dayTemplates.toArray()),
+      ...(await db.muscleGroups.toArray()),
+      ...(await db.mesocycles.toArray()),
+    ].map((row) => row.id)
+
+    for (const id of ids) expect(id).toMatch(uuid)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('applies the Part 4 rest times and weight increment', async () => {
-    await seedIfEmpty(SEEDED_ON)
-    const exercises = await db.exercises.toArray()
-
-    for (const exercise of exercises) {
-      expect(exercise.weightIncrementLb).toBe(DEFAULT_WEIGHT_INCREMENT_LB)
-      expect(exercise.restSeconds).toBe(
-        exercise.type === 'compound'
-          ? DEFAULT_REST_COMPOUND_SECONDS
-          : DEFAULT_REST_ISOLATION_SECONDS,
-      )
-    }
-  })
-
-  it('maps the days onto the right weekdays', async () => {
-    await seedIfEmpty(SEEDED_ON)
-    const templates = await db.dayTemplates.toArray()
-
-    const byLetter = Object.fromEntries(templates.map((t) => [t.letter, t]))
-    expect(byLetter['A']?.weekdays).toEqual([1, 4])
-    expect(byLetter['B']?.weekdays).toEqual([2, 5])
-    expect(byLetter['C']?.weekdays).toEqual([3, 6])
-  })
-
-  it('orders each day’s exercises exactly as the brief lists them', async () => {
+  it('stamps every row with updatedAt so a future sync can resolve conflicts', async () => {
     await seedIfEmpty(SEEDED_ON)
 
-    for (const day of SEED_DAYS) {
-      const template = await db.dayTemplates.where('letter').equals(day.letter).first()
-      if (!template) throw new Error(`expected day ${day.letter} to be seeded`)
+    const rows = [
+      ...(await db.exercises.toArray()),
+      ...(await db.dayTemplates.toArray()),
+      ...(await db.muscleGroups.toArray()),
+      ...(await db.mesocycles.toArray()),
+    ]
 
-      const resolved = await db.exercises.bulkGet(template.exerciseIds)
-      expect(resolved.map((exercise) => exercise?.name)).toEqual(
-        day.exercises.map((exercise) => exercise.name),
-      )
-    }
-  })
-
-  it('starts the first mesocycle on the Monday of the seeding week', async () => {
-    await seedIfEmpty(SEEDED_ON)
-    const mesocycle = await db.mesocycles.toCollection().first()
-
-    expect(mesocycle?.startDate).toBe('2026-08-17')
-    expect(mesocycle?.totalWeeks).toBe(6)
-    expect(mesocycle?.deloadWeek).toBe(6)
-    expect(mesocycle?.status).toBe('active')
-  })
-
-  it('points settings at the mesocycle it created', async () => {
-    await seedIfEmpty(SEEDED_ON)
-    const settings = await db.settings.get('app')
-    const mesocycle = await db.mesocycles.toCollection().first()
-
-    expect(settings?.activeMesocycleId).toBe(mesocycle?.id)
-    expect(settings?.lastCardio.durationMin).toBe(45)
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) expect(typeof row.updatedAt).toBe('number')
   })
 })
 
 describe('getTodayView', () => {
-  it('returns Wednesday as Day C with its six exercises in order', async () => {
+  beforeEach(async () => {
     await seedIfEmpty(SEEDED_ON)
+  })
+
+  it('returns Wednesday as Day C with its six exercises in order', async () => {
     const view = await getTodayView('2026-08-19')
 
     expect(view.template?.letter).toBe('C')
@@ -136,8 +242,13 @@ describe('getTodayView', () => {
     expect(view.position?.totalWeeks).toBe(6)
   })
 
+  it('resolves muscle group names for display', async () => {
+    const view = await getTodayView('2026-08-19')
+    expect(view.exercises[0]?.muscleGroupName).toBe('Back')
+    expect(view.exercises[5]?.muscleGroupName).toBe('Shoulders')
+  })
+
   it('returns a rest day on Sunday, and names what is next', async () => {
-    await seedIfEmpty(SEEDED_ON)
     const view = await getTodayView('2026-08-23')
 
     expect(view.template).toBeNull()
@@ -148,7 +259,6 @@ describe('getTodayView', () => {
   it('drops an exercise that a template still references after deletion', async () => {
     // A template can outlive an exercise the user removed; the day must still
     // render rather than crashing on a dangling id.
-    await seedIfEmpty(SEEDED_ON)
     const template = await db.dayTemplates.where('letter').equals('C').first()
     const firstId = template?.exerciseIds[0]
     if (!firstId) throw new Error('expected Day C to have exercises')
@@ -158,5 +268,18 @@ describe('getTodayView', () => {
 
     expect(view.exercises).toHaveLength(5)
     expect(view.exercises.map((e) => e.id)).not.toContain(firstId)
+  })
+
+  it('survives a muscle group being deleted out from under an exercise', async () => {
+    const groups = await db.muscleGroups.toArray()
+    const back = groups.find((group) => group.name === 'Back')
+    if (!back) throw new Error('expected a Back muscle group')
+
+    await db.muscleGroups.delete(back.id)
+    const view = await getTodayView('2026-08-19')
+
+    // Renders rather than throwing, and shows nothing rather than a raw UUID.
+    expect(view.exercises).toHaveLength(6)
+    expect(view.exercises[0]?.muscleGroupName).toBe('')
   })
 })

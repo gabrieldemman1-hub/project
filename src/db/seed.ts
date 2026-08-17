@@ -7,7 +7,7 @@
  */
 
 import { db } from './db'
-import type { DayTemplate, Exercise, ExerciseType } from './schema'
+import type { DayTemplate, Exercise, ExerciseType, MuscleGroup } from './schema'
 import { newId } from '../lib/ids'
 import { startOfWeek, toIsoDate } from '../lib/date'
 
@@ -25,6 +25,29 @@ export const DEFAULT_CARDIO = {
   inclinePct: 10,
   speedMph: 3,
 } as const
+
+/**
+ * The muscles this program trains. `inheritsFrom` names the group whose
+ * soreness answer stands in when this one is not prompted for directly, so no
+ * exercise is ever left without an answer while the prompt list stays short
+ * (PLAN.md §2.3).
+ */
+export const SEED_MUSCLE_GROUPS: ReadonlyArray<{
+  name: string
+  inheritsFrom: string | null
+}> = [
+  { name: 'Chest', inheritsFrom: null },
+  { name: 'Triceps', inheritsFrom: null },
+  { name: 'Quads', inheritsFrom: null },
+  { name: 'Hamstrings', inheritsFrom: null },
+  // Day B prompts for quads and hamstrings only; calves ride along with quads
+  // rather than adding a third question. Revisit when Phase 4 puts the real
+  // feedback screens in front of the user.
+  { name: 'Calves', inheritsFrom: 'Quads' },
+  { name: 'Back', inheritsFrom: null },
+  { name: 'Biceps', inheritsFrom: null },
+  { name: 'Shoulders', inheritsFrom: null },
+]
 
 interface SeedExercise {
   name: string
@@ -199,6 +222,35 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
 
   const timestamp = now.getTime()
 
+  // Muscle groups first — everything else references them by id.
+  const muscleGroups: MuscleGroup[] = SEED_MUSCLE_GROUPS.map((group) => ({
+    id: newId(),
+    name: group.name,
+    inheritsFromId: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }))
+  const muscleGroupIdByName = new Map(muscleGroups.map((g) => [g.name, g.id]))
+
+  // Second pass, now that every group has an id, to wire up inheritance.
+  for (const [index, seed] of SEED_MUSCLE_GROUPS.entries()) {
+    if (!seed.inheritsFrom) continue
+    const parentId = muscleGroupIdByName.get(seed.inheritsFrom)
+    if (!parentId) {
+      throw new Error(
+        `Muscle group "${seed.name}" inherits from unknown group "${seed.inheritsFrom}"`,
+      )
+    }
+    const group = muscleGroups[index]
+    if (group) group.inheritsFromId = parentId
+  }
+
+  function muscleGroupId(name: string): string {
+    const id = muscleGroupIdByName.get(name)
+    if (!id) throw new Error(`Exercise references unknown muscle group "${name}"`)
+    return id
+  }
+
   const exercises: Exercise[] = []
   const dayTemplates: DayTemplate[] = []
 
@@ -210,7 +262,7 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
         id: newId(),
         name: seed.name,
         type: seed.type,
-        muscleGroup: seed.muscleGroup,
+        muscleGroupId: muscleGroupId(seed.muscleGroup),
         repTargetMin: seed.repTargetMin,
         repTargetMax: seed.repTargetMax,
         weightIncrementLb: DEFAULT_WEIGHT_INCREMENT_LB,
@@ -229,7 +281,7 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
       name: day.name,
       weekdays: [...day.weekdays],
       exerciseIds,
-      sorenessPrompts: [...day.sorenessPrompts],
+      sorenessPromptGroupIds: day.sorenessPrompts.map(muscleGroupId),
       createdAt: timestamp,
       updatedAt: timestamp,
     })
@@ -239,14 +291,19 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
   // every one after this is started by hand from Settings (PLAN.md A-4).
   const mesocycleId = newId()
 
+  // Set inside the transaction, so the return value reports what was actually
+  // written rather than what was intended.
+  let wrote = false
+
   await db.transaction(
     'rw',
-    [db.exercises, db.dayTemplates, db.mesocycles, db.settings],
+    [db.muscleGroups, db.exercises, db.dayTemplates, db.mesocycles, db.settings],
     async () => {
       // Re-check inside the transaction so two tabs racing on first launch
       // cannot both seed.
       if (await db.settings.get('app')) return
 
+      await db.muscleGroups.bulkAdd(muscleGroups)
       await db.exercises.bulkAdd(exercises)
       await db.dayTemplates.bulkAdd(dayTemplates)
       await db.mesocycles.add({
@@ -268,8 +325,9 @@ export async function seedIfEmpty(now: Date = new Date()): Promise<boolean> {
         seededAt: timestamp,
         updatedAt: timestamp,
       })
+      wrote = true
     },
   )
 
-  return true
+  return wrote
 }

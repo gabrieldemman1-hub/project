@@ -47,6 +47,36 @@ export async function getExercisesByIds(
   return found.filter((exercise): exercise is Exercise => exercise !== undefined)
 }
 
+/**
+ * An exercise with its muscle group's display name resolved, so components
+ * never have to join tables themselves.
+ */
+export interface ExerciseView extends Exercise {
+  muscleGroupName: string
+}
+
+async function withMuscleGroupNames(
+  exercises: readonly Exercise[],
+): Promise<ExerciseView[]> {
+  if (exercises.length === 0) return []
+
+  const groups = await db.muscleGroups.bulkGet(
+    Array.from(new Set(exercises.map((exercise) => exercise.muscleGroupId))),
+  )
+  const nameById = new Map(
+    groups
+      .filter((group) => group !== undefined)
+      .map((group) => [group.id, group.name]),
+  )
+
+  return exercises.map((exercise) => ({
+    ...exercise,
+    // A missing group means the row was deleted out from under the exercise;
+    // showing nothing is better than showing a raw UUID.
+    muscleGroupName: nameById.get(exercise.muscleGroupId) ?? '',
+  }))
+}
+
 export async function getSessionForDate(
   date: IsoDate,
 ): Promise<Session | undefined> {
@@ -62,7 +92,7 @@ export interface TodayView {
   /** Null on a rest day. */
   template: DayTemplate | null
   /** Ordered as the session will run. Empty on a rest day. */
-  exercises: Exercise[]
+  exercises: ExerciseView[]
   /** Tomorrow's template, so a rest day can say what is coming. */
   nextTemplate: DayTemplate | null
   /** Null before the first mesocycle exists, i.e. before the seed has run. */
@@ -81,7 +111,9 @@ export async function getTodayView(date: IsoDate): Promise<TodayView> {
   ])
 
   const template = templateForDate(templates, date)
-  const exercises = template ? await getExercisesByIds(template.exerciseIds) : []
+  const exercises = template
+    ? await withMuscleGroupNames(await getExercisesByIds(template.exerciseIds))
+    : []
 
   return {
     date,

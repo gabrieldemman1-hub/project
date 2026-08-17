@@ -86,6 +86,7 @@ export function currentStreak(
   sessions: readonly Session[],
   date: IsoDate,
 ): number {
+  const statusByDate = new Map(sessions.map((s) => [s.date, s.status]))
   const completedDates = new Set(
     sessions.filter((s) => s.status === 'completed').map((s) => s.date),
   )
@@ -94,9 +95,11 @@ export function currentStreak(
   let streak = 0
   let cursor = date
 
-  // Today is still ahead of the user until they train, so an unlogged today is
-  // not yet a broken streak — start from yesterday if today has no session.
   if (!completedDates.has(cursor)) {
+    // Deciding to skip today breaks the run immediately. Not having trained
+    // *yet* does not — so these two cases must be told apart, and only the
+    // absence of a decision earns the grace.
+    if (statusByDate.get(cursor) === 'skipped') return 0
     cursor = addDays(cursor, -1)
   }
 

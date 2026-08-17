@@ -39,6 +39,18 @@ async function main(): Promise<void> {
 
   const templates = await getDayTemplates()
 
+  const muscleGroups = await db.muscleGroups.toArray()
+  const groupNameById = new Map(muscleGroups.map((group) => [group.id, group.name]))
+  /** Group id → the name of the group whose soreness answer it borrows. */
+  const inheritedFrom = new Map(
+    muscleGroups
+      .filter((group) => group.inheritsFromId !== null)
+      .map((group) => [
+        group.id,
+        groupNameById.get(group.inheritsFromId ?? '') ?? '?',
+      ]),
+  )
+
   heading('PROGRAM')
   for (const template of templates) {
     const days = template.weekdays
@@ -48,14 +60,18 @@ async function main(): Promise<void> {
     console.log(
       `\n  ${BOLD}Day ${template.letter} — ${template.name}${RESET} ${dim(`(${days})`)}`,
     )
-    console.log(
-      dim(`  soreness prompts: ${template.sorenessPrompts.join(', ') || 'none'}`),
+    const promptNames = template.sorenessPromptGroupIds.map(
+      (id) => groupNameById.get(id) ?? '?',
     )
+    console.log(dim(`  soreness prompts: ${promptNames.join(', ') || 'none'}`))
 
     const exercises = await getExercisesByIds(template.exerciseIds)
     for (const [index, exercise] of exercises.entries()) {
+      const group = groupNameById.get(exercise.muscleGroupId) ?? '?'
+      const inherits = inheritedFrom.get(exercise.muscleGroupId)
+      const groupLabel = inherits ? `${group} → ${inherits}` : group
       const reps = `${exercise.repTargetMin}–${exercise.repTargetMax} reps`
-      const detail = `${exercise.type}, ${exercise.muscleGroup}, ${reps}, +${exercise.weightIncrementLb} lb, ${exercise.restSeconds}s rest`
+      const detail = `${exercise.type}, ${groupLabel}, ${reps}, +${exercise.weightIncrementLb} lb, ${exercise.restSeconds}s rest`
       console.log(`    ${index + 1}. ${exercise.name.padEnd(36)} ${dim(detail)}`)
     }
   }

@@ -85,13 +85,13 @@ The brief lists Recharts for charts. I agree, and I'm **not installing it until 
 
 | Concern | Choice | Why |
 |---|---|---|
-| Build | Vite 7 + React 19 + TypeScript (strict) | As specified. `strict: true`, and `any` is banned by CLAUDE.md. |
+| Build | Vite 8 + React 19 + TypeScript (strict) | As specified. `strict: true`, and `any` is banned by CLAUDE.md. |
 | Styling | Tailwind CSS v4 via `@tailwindcss/vite` | Current version, no PostCSS config needed. See §5 for how it stays token-driven. |
 | Storage | Dexie 4 + `dexie-react-hooks` | As specified. `useLiveQuery` gives components auto-updating reads with no state library. |
 | State | React local state + Dexie live queries | As specified. No Redux, no Zustand, no React Query. |
 | Routing | ~40 lines of hand-rolled hash routing | Six screens. `react-router` is 20 kB to solve a problem this app doesn't have. Hash routing also survives being loaded from a home-screen icon offline. |
 | Tests | Vitest + `fake-indexeddb` | Vitest as specified. `fake-indexeddb` lets database code be tested in Node without a browser. |
-| Fonts | `@fontsource/space-grotesk` (numbers), `@fontsource/inter` (text) | Self-hosted so they work offline. Space Grotesk is the "characterful" face with tabular figures; Inter is the legible one. |
+| Fonts | `@fontsource-variable/space-grotesk` (numbers), `@fontsource-variable/inter` (text) | Self-hosted so they work offline. Space Grotesk is the "characterful" face with tabular figures; Inter is the legible one. |
 | Screenshots | `@playwright/test` (dev only) | So the 390×844 screenshot gate is a repeatable script, not me eyeballing it. |
 | Charts | Recharts — **Phase 6 only** | Not installed before then. |
 | Backend | None | As specified. |
@@ -102,9 +102,10 @@ The brief lists Recharts for charts. I agree, and I'm **not installing it until 
 
 ## 4. Data model
 
-Seven Dexie tables. All in `src/db/`.
+Nine Dexie tables. All in `src/db/`.
 
 ```
+muscleGroups       Chest, Triceps, Quads … referenced by id, never by name
 exercises          the library — editable, this is not a hardcoded structure
 dayTemplates       Day A / B / C: which exercises, in what order, on which weekdays
 mesocycles         a 6-week block; you start these manually
@@ -118,9 +119,11 @@ appSettings        singleton: active mesocycle, last cardio settings
 
 ### Key fields
 
-**`exercises`** — `id`, `name`, `type: 'compound' | 'isolation'`, `muscleGroup`, `repTargetMin`, `repTargetMax`, `weightIncrementLb` (default 5, editable per exercise as you asked), `restSeconds` (150 compound / 120 isolation, editable), `isArchived`, `updatedAt`
+**`muscleGroups`** — `id`, `name`, `inheritsFromId: string | null`, `updatedAt`. Its own table rather than a name repeated across three others, so renaming "Quads" in Settings cannot silently detach an exercise from its soreness prompt or orphan historical feedback. `inheritsFromId` is where §2.3 lives: a group not prompted for directly borrows another's answer, which keeps the prompt list short without leaving any exercise unanswered. Seeded so calves ride along with quads.
 
-**`dayTemplates`** — `id`, `letter: 'A' | 'B' | 'C'`, `name`, `weekdays: number[]`, `exerciseIds: string[]` (ordered — this is what makes exercises swappable), `sorenessPrompts: string[]` (§2.3 lives here)
+**`exercises`** — `id`, `name`, `type: 'compound' | 'isolation'`, `muscleGroupId`, `repTargetMin`, `repTargetMax`, `weightIncrementLb` (default 5, editable per exercise as you asked), `restSeconds` (150 compound / 120 isolation, editable), `isArchived`, `updatedAt`
+
+**`dayTemplates`** — `id`, `letter: 'A' | 'B' | 'C'`, `name`, `weekdays: number[]`, `exerciseIds: string[]` (ordered — this is what makes exercises swappable), `sorenessPromptGroupIds: string[]`
 
 **`sessions`** — `id`, `date` (`YYYY-MM-DD`), `dayTemplateId`, `mesocycleId`, `weekNumber`, `isDeload`, `status`, `currentExerciseIndex` (**this is what makes a killed session resume in the right place**), `cardio`, `startedAt`, `completedAt`
 
@@ -268,7 +271,7 @@ One phase per session. No building ahead. Every phase ends with: tests run and o
 | Phase | Status |
 |---|---|
 | Plan | ✅ Approved |
-| 1 — Skeleton and data layer | ✅ Complete — 41 tests passing, build passing, screenshots captured |
+| 1 — Skeleton and data layer | ✅ Complete — 67 tests passing, build passing, reviewed, verified on four phone sizes |
 | 2 — Logging | ⬜ Not started |
 | 3 — Engine | ⬜ Not started |
 | 4 — Engine wired in | ⬜ Not started |
@@ -295,7 +298,8 @@ src/styles/tokens.ts             single source of truth for every visual value
 src/styles/index.css             base layer, self-hosted fonts, reduced motion
 src/styles/tokens.generated.css  generated — do not edit
 src/db/schema.ts · db.ts · seed.ts · queries.ts
-src/lib/date.ts · schedule.ts · ids.ts
+src/db/program.fixture.ts       BRIEF Part 4 transcribed by hand, for the tests
+src/lib/date.ts · schedule.ts · ids.ts · useToday.ts
 src/components/Screen.tsx · Card.tsx · Button.tsx
 src/features/home/HomeScreen.tsx
 src/test/setup.ts
@@ -327,3 +331,64 @@ emitted into Tailwind's `spacing` namespace rather than a `size` one, because
 v4 has no size namespace for `min-h-*`; and `scripts/screenshot.ts` falls back
 to a pre-installed Chromium when the CI image ships a different revision to the
 one Playwright bundles.
+
+### Phase 1 review, and what it changed
+
+An independent review against this plan found six things worth fixing. All are
+now fixed, and the fixes are what the second and third Phase 1 commits contain.
+
+1. **The streak was wrong when you skipped today.** `currentStreak` gave an
+   unlogged today a grace period so a streak wouldn't read zero before you'd
+   trained. But it couldn't tell "haven't trained yet" from "tapped Skip", so
+   skipping Wednesday after training Monday and Tuesday still showed 2. It now
+   returns 0. The old test only covered a skip in the *past*, which is why the
+   suite was green while the behaviour was wrong.
+2. **The seed tests were tautological.** They compared the database against the
+   same constants the seed writes from, so they proved the plumbing worked but
+   not that it matched the brief — a deleted exercise, a flipped
+   compound/isolation flag or a wrong rep target would all have passed.
+   `src/db/program.fixture.ts` now transcribes Part 4 by hand, and every seeded
+   row is asserted against it. Verified by deliberately breaking the seed five
+   ways and confirming each one fails.
+3. **Muscle groups were joined by display name across three tables**, which
+   quietly contradicted the sync-readiness property this section claims.
+   Renaming a group would have detached exercises from their prompts. Now a
+   real table with UUID keys — done in Phase 1 because there is no data to
+   migrate yet, and it would have forced a schema change in Phase 4.
+4. **`Standing calf raise` had no soreness prompt covering it** — Day B prompts
+   quads and hamstrings, and nothing expressed §2.3's "smaller muscles inherit".
+   `inheritsFromId` now does, and a test fails if any exercise is left
+   uncovered.
+5. **Two smaller correctness issues**: `seedIfEmpty` reported a write it hadn't
+   made when the two-tab race guard fired, and the `newId` fallback called
+   `crypto` inside a branch that only ran when `crypto` was undefined.
+6. **The date never advanced at midnight.** A phone left on the home screen
+   overnight showed the previous day's session until reloaded — cosmetic now,
+   a data-correctness problem from Phase 2 where a session is keyed on it.
+   `useToday` now re-checks at midnight and whenever the tab becomes visible.
+
+### Mobile verification
+
+Prompted by "make sure it's mobile friendly", the screenshot script became a
+device sweep, and it immediately found a bug that a desktop browser cannot see.
+
+**The bug:** safe-area padding was applied to `body`, while the screen shell
+was a full viewport height. On a notched iPhone that is 100dvh *plus* about
+80px, so the whole page scrolled and "Start session" sat below the fold —
+exactly the defect fixed earlier in the phase, reappearing on the real device
+only. Insets are now absorbed by the layout rather than added to the document.
+
+Every screen is now checked on four phones — iPhone SE (375×667), 13 mini
+(375×812), 14 (390×844), 15 Pro Max (430×932) — with their real safe-area
+insets simulated, asserting: no page scroll, no horizontal overflow, the
+primary action on-screen and in the bottom third, nothing under the notch or
+home indicator, no touch target under 44px, and tabular figures.
+
+The check was itself verified by removing the fix and confirming it fails. Note
+what that control showed: with the fix removed, the **iPhone 14 still passed**
+while the 13 mini and 15 Pro Max failed, because 48px of padding happens to
+clear a 47px notch. Testing one device size would have missed this.
+
+Also hardened for phone use: the scroll region contains its own overscroll, so
+a rubber-band at the top of the exercise list can't trigger a pull-to-refresh
+and reload the app mid-workout.

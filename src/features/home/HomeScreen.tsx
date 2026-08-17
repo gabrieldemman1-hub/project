@@ -5,7 +5,7 @@ import { Card } from '../../components/Card'
 import { Screen } from '../../components/Screen'
 import { getTodayView, type TodayView } from '../../db/queries'
 import { formatLongDate } from '../../lib/date'
-import { today } from '../../lib/schedule'
+import { useToday } from '../../lib/useToday'
 
 /**
  * Home / Today (BRIEF.md Part 6).
@@ -14,7 +14,7 @@ import { today } from '../../lib/schedule'
  * in Settings and this re-renders without a reload.
  */
 export function HomeScreen() {
-  const date = today()
+  const date = useToday()
   const view = useLiveQuery(() => getTodayView(date), [date])
 
   // First paint before IndexedDB answers. Deliberately blank rather than a
@@ -68,7 +68,7 @@ function TrainingDay({ view }: { view: TodayView }) {
                   {exercise.name}
                 </p>
                 <p className="mt-2 text-xs tracking-wider text-text-secondary uppercase">
-                  {exercise.muscleGroup}
+                  {exercise.muscleGroupName}
                   <span className="mx-2 text-text-muted">·</span>
                   {exercise.repTargetMin}–{exercise.repTargetMax} reps
                 </p>

@@ -5,12 +5,14 @@
  */
 
 /**
- * `crypto.randomUUID` is available in every browser this app targets and in
- * Node 19+, but it is only exposed on secure origins. The fallback keeps the
- * app working if it is ever served over plain HTTP on a LAN address.
+ * `crypto.randomUUID` exists in every browser this app targets and in Node 19+,
+ * but it is only exposed on secure origins. `crypto.getRandomValues` is
+ * available either way, so the fallback covers the app being served over plain
+ * HTTP on a LAN address — which is exactly how it gets opened on a phone during
+ * development.
  */
 export function newId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()
   }
 

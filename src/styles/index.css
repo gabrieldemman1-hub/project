@@ -10,6 +10,19 @@
 @import './tokens.generated.css';
 
 @layer base {
+  :root {
+    /*
+     * Safe-area insets, hoisted into custom properties for two reasons: the
+     * layout can subtract them from the viewport rather than adding them to the
+     * document, and tests can override them to simulate a notched iPhone in a
+     * desktop browser, where env() always reports zero.
+     */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
+
   html {
     background-color: var(--color-bg);
     /* Stops iOS from scaling text up in landscape. */
@@ -24,13 +37,16 @@
     line-height: var(--leading-normal);
     letter-spacing: var(--tracking-wide);
     -webkit-font-smoothing: antialiased;
-    /* Part 7 quality floor: respect the iPhone's safe areas. */
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    /* The app owns its own scrolling; the page itself never bounces. */
-    overscroll-behavior-y: none;
+    /*
+     * Safe areas are applied inside the screen shell, not here. Padding the
+     * body would make the document taller than the viewport — a full-height
+     * screen plus the notch — which pushes the primary action off the bottom
+     * of the phone.
+     */
+    margin: 0;
+    /* The app owns its own scrolling; the page itself never bounces, so a
+       pull-to-refresh can never reload the app mid-workout. */
+    overscroll-behavior: none;
   }
 
   /* Numbers are the content. Tabular figures so digits do not jump width as

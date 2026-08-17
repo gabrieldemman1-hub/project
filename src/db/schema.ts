@@ -30,6 +30,25 @@ export type LoadAction = 'increase' | 'hold' | 'decrease'
 export type SessionStatus = 'in_progress' | 'completed' | 'skipped'
 
 /**
+ * A trained muscle. Its own table with a UUID key rather than a name repeated
+ * across exercises, day templates and feedback: renaming "Quads" in Settings
+ * must not silently detach an exercise from its soreness prompt or orphan every
+ * historical feedback row.
+ */
+export interface MuscleGroup {
+  id: string
+  name: string
+  /**
+   * The group whose soreness answer this one inherits when it isn't prompted
+   * for directly — how PLAN.md §2.3 keeps the feedback flow under five seconds
+   * without leaving smaller muscles unanswered. Null when it stands alone.
+   */
+  inheritsFromId: string | null
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+/**
  * A movement in the library. Editable: the seeded list is a starting point, not
  * a hardcoded structure (BRIEF.md Part 4).
  */
@@ -38,7 +57,7 @@ export interface Exercise {
   name: string
   type: ExerciseType
   /** Drives which soreness answer applies to this exercise. */
-  muscleGroup: string
+  muscleGroupId: string
   repTargetMin: number
   repTargetMax: number
   /** Default 5 lb, editable per exercise since some stacks jump by 10 or 15. */
@@ -64,9 +83,10 @@ export interface DayTemplate {
   /**
    * Which muscle groups get a soreness prompt before training starts. Kept
    * separate from the exercises' own muscle groups so the prompt list can be
-   * trimmed without retagging exercises — see PLAN.md §2.3.
+   * trimmed without retagging exercises — see PLAN.md §2.3. Groups not listed
+   * here inherit their answer via `MuscleGroup.inheritsFromId`.
    */
-  sorenessPrompts: string[]
+  sorenessPromptGroupIds: string[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -141,7 +161,7 @@ export interface ExerciseFeedback {
 export interface SorenessFeedback {
   id: string
   sessionId: string
-  muscleGroup: string
+  muscleGroupId: string
   soreness: Soreness
   createdAt: Timestamp
   updatedAt: Timestamp

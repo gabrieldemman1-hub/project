@@ -25,7 +25,7 @@ export function App() {
   if (error) {
     return (
       <div className="flex min-h-dvh items-center justify-center px-6">
-        <p className="max-w-[34ch] text-center text-sm leading-relaxed text-alert">
+        <p className="max-w-measure-wide text-center text-sm leading-relaxed text-alert">
           The database could not be opened: {error.message}
         </p>
       </div>
