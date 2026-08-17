@@ -212,6 +212,25 @@ async function main(): Promise<void> {
       (await revived.getByText('How was the pump?').count()) === 0,
     )
 
+    console.log('\nEDIT — a mistyped set is correctable by tapping its row')
+    await revived.getByRole('button', { name: /^Edit set 1: 200 × 8$/ }).click()
+    check(
+      'tapping a logged row switches the action to Save',
+      (await revived.getByRole('button', { name: 'Save set 1' }).count()) === 1,
+    )
+    await revived.getByRole('button', { name: 'Decrease Reps' }).click()
+    await revived.getByRole('button', { name: 'Save set 1' }).click()
+    await revived.getByRole('button', { name: /^Edit set 1: 200 × 7$/ }).waitFor()
+    check('the corrected set reads 200 × 7 — overwritten, not duplicated', true)
+    check(
+      'after saving, the action returns to logging the next set',
+      (await revived.getByRole('button', { name: 'Log set 2 of 3' }).count()) === 1,
+    )
+    check(
+      'no rest timer for a correction',
+      (await revived.getByRole('button', { name: 'Dismiss' }).count()) === 0,
+    )
+
     console.log('\nCOMPLETE — finish exercise 2; its last planned set asks by itself')
     await revived.getByRole('button', { name: 'Log set 2 of 3' }).click()
     await revived.getByRole('button', { name: 'Dismiss' }).click()

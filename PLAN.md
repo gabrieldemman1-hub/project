@@ -440,6 +440,16 @@ screenshots/history-charts*.png
   history query briefly reintroduced a sequential late read before being
   folded back into the Promise.all batch the live-query rule demands.
 
+### Interlude: editing a logged set (product owner request, from real use)
+
+Logged set rows are now tappable: tapping one loads its numbers into the
+steppers, the action button becomes "Save set N", and saving overwrites that
+set in place — the durable overwrite-by-index path tested since Phase 2.
+Tapping the row again cancels and the in-progress next-set draft is
+restored. A correction starts no rest timer and asks no feedback questions.
+Browser-proven: edit 200 × 8 to 200 × 7, overwritten not duplicated, action
+returns to the next set.
+
 ### Phase 5+6 review, and what it changed
 
 The review recomputed the deload maths, traced every block-boundary edge

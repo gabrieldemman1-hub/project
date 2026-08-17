@@ -302,6 +302,40 @@ function ExercisePane({
   const [saving, setSaving] = useState(false)
   /** True once the user has adjusted a stepper — their number then wins. */
   const [touched, setTouched] = useState(false)
+  /**
+   * A logged set being corrected: tapping its row loads it into the steppers,
+   * stashing the in-progress next-set draft to restore afterwards. Tapping
+   * the same row again cancels.
+   */
+  const [editing, setEditing] = useState<{
+    index: number
+    stashWeight: number
+    stashReps: number
+  } | null>(null)
+
+  function beginOrToggleEdit(setIndex: number, logged: LoggedSet) {
+    if (editing?.index === setIndex) {
+      cancelEdit()
+      return
+    }
+    setEditing((current) => ({
+      index: setIndex,
+      // The stash is the next-set draft, taken once — switching between rows
+      // mid-edit keeps the original draft to come back to.
+      stashWeight: current?.stashWeight ?? weight,
+      stashReps: current?.stashReps ?? reps,
+    }))
+    setWeight(logged.weightLb)
+    setReps(logged.reps)
+    setTouched(true)
+  }
+
+  function cancelEdit() {
+    if (!editing) return
+    setWeight(editing.stashWeight)
+    setReps(editing.stashReps)
+    setEditing(null)
+  }
 
   // The prescription can arrive *after* this pane mounts: the safety-net
   // regeneration after a kill, or simply a slow device refreshing between the
@@ -319,6 +353,21 @@ function ExercisePane({
     if (saving || weight <= 0 || reps <= 0) return
     setSaving(true)
     try {
+      // Correcting an existing set: same durable write, aimed at that row's
+      // index — saveSet overwrites by index rather than duplicating. No rest
+      // timer and no feedback prompt; a correction is not a new set.
+      if (editing) {
+        await saveSet({
+          sessionId,
+          exerciseId: exercise.id,
+          setIndex: editing.index,
+          weightLb: weight,
+          reps,
+        })
+        cancelEdit()
+        return
+      }
+
       // The write starts on the tap and the row below only appears once the
       // transaction has committed and the live query refreshes.
       await saveSet({
@@ -349,9 +398,11 @@ function ExercisePane({
         <Button onClick={() => void logSet()} disabled={saving || weight <= 0 || reps <= 0}>
           {saving
             ? 'Saving…'
-            : prescription && nextSetIndex < prescription.plannedSets
-              ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
-              : `Log set ${nextSetIndex + 1}`}
+            : editing
+              ? `Save set ${editing.index + 1}`
+              : prescription && nextSetIndex < prescription.plannedSets
+                ? `Log set ${nextSetIndex + 1} of ${prescription.plannedSets}`
+                : `Log set ${nextSetIndex + 1}`}
         </Button>
       }
     >
@@ -401,26 +452,56 @@ function ExercisePane({
               (_, setIndex) => {
                 const logged = sets[setIndex]
                 const target = previous[setIndex]
-                return (
-                  <li
-                    key={setIndex}
-                    className="flex min-h-touch-min items-center gap-4 rounded-md border border-border bg-surface px-4"
-                  >
+                const isEditing = editing?.index === setIndex
+                const row = (
+                  <>
                     <span className="num w-5 shrink-0 text-sm text-text-muted">
                       {setIndex + 1}
                     </span>
                     {/* Last session, greyed: the target to beat. */}
-                    <span className="num w-20 shrink-0 text-sm text-text-muted">
+                    <span className="num w-20 shrink-0 text-left text-sm text-text-muted">
                       {target ? `${target.weightLb} × ${target.reps}` : '—'}
                     </span>
                     <span className="num flex-1 text-right text-base text-text">
                       {logged ? `${logged.weightLb} × ${logged.reps}` : ''}
                     </span>
+                  </>
+                )
+                return (
+                  <li key={setIndex}>
+                    {logged ? (
+                      // A logged set is tappable: it loads into the steppers
+                      // for correction. Tapping again cancels.
+                      <button
+                        type="button"
+                        aria-label={`Edit set ${setIndex + 1}: ${logged.weightLb} × ${logged.reps}`}
+                        onClick={() => beginOrToggleEdit(setIndex, logged)}
+                        className={`flex min-h-touch-min w-full items-center gap-4 rounded-md border px-4 ${
+                          isEditing
+                            ? 'border-border-strong bg-surface-raised'
+                            : 'border-border bg-surface'
+                        }`}
+                      >
+                        {row}
+                      </button>
+                    ) : (
+                      <div className="flex min-h-touch-min items-center gap-4 rounded-md border border-border bg-surface px-4">
+                        {row}
+                      </div>
+                    )}
                   </li>
                 )
               },
             )}
           </ul>
+        ) : null}
+
+        {editing ? (
+          <p className="mt-4 text-xs tracking-wider text-text-secondary uppercase">
+            Editing set <span className="num text-text">{editing.index + 1}</span>
+            <span className="mx-2 text-text-muted">·</span>
+            tap the row again to cancel
+          </p>
         ) : null}
 
         <div className="mt-8 flex flex-col gap-5">
