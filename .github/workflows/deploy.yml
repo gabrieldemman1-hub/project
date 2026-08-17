@@ -27,9 +27,9 @@ jobs:
       # run here. Skip the browser download to keep the job fast.
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -45,7 +45,11 @@ jobs:
           # Must match the repository name — GitHub Pages serves from /<repo>/.
           VITE_BASE_PATH: /project/
 
+      # enablement turns Pages on via the API using the pages:write permission
+      # above, so the site does not have to be switched on by hand in settings.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
