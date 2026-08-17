@@ -392,6 +392,31 @@ screenshots/feedback-*.png · session-recommendation.png
   answer. Standing offer: say the word to switch any day to the full per-muscle
   list — it is data, not code.
 
+### Phase 3+4 review, and what it changed
+
+The independent review recomputed the whole engine against the brief —
+matrix cell by cell, RIR row by row, deload rounding brute-forced across
+increments up to 1000 lb — and confirmed it exact, tests genuine, purity
+clean, and the live-query fix holding. It found one bug worth fixing and
+three things now recorded as deliberate:
+
+1. **Fixed:** if the app died between the last check-in answer and the plan
+   being stored, the exercise screen could show last session's weight in the
+   stepper directly under a sentence saying "add 5 lb" — reproduced in a real
+   browser on exactly the recovery path built for that window. The stepper now
+   re-seeds when the prescription arrives, unless sets are already logged or
+   the user has touched it (their number always wins).
+2. **Fixed (cosmetic honesty):** at the one-increment weight floor, a
+   below-floor drop used to report "decrease · drop to 5 lb" while prescribing
+   the same 5 lb. The action now derives from what actually happened to the
+   weight.
+3. **Accepted:** an exercise added to a day mid-session gets no prescription
+   for that session (it degrades to plain logging; next session treats it
+   properly). Editing templates lands with Settings in Phase 7 — revisit then.
+4. **Accepted:** soreness inheritance resolves one level (calves → quads),
+   which covers all seeded data; chains only become possible once groups are
+   user-editable.
+
 ### Phase 2 review, and what it changed
 
 The independent review confirmed the write-on-log contract, the two-tap

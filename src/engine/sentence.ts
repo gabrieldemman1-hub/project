@@ -29,7 +29,7 @@ export function buildSentence(args: {
   let loadClause: string
   let reason: string
 
-  if (load.reasons.some((reason) => reason.includes('below-floor'))) {
+  if (load.action === 'decrease' && load.reasons.some((reason) => reason.includes('below-floor'))) {
     loadClause = `drop to ${load.weightLb} lb`
     reason = 'reps fell under the target range'
   } else if (load.action === 'increase') {

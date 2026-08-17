@@ -300,6 +300,20 @@ function ExercisePane({
       exercise.repTargetMin,
   )
   const [saving, setSaving] = useState(false)
+  /** True once the user has adjusted a stepper — their number then wins. */
+  const [touched, setTouched] = useState(false)
+
+  // The prescription can arrive *after* this pane mounts: the safety-net
+  // regeneration after a kill, or simply a slow device refreshing between the
+  // soreness commit and the prescriptions commit. The mount-time default then
+  // came from last session, and without this the stepper would sit on 185
+  // directly under a sentence saying "add 5 lb". Re-seed as long as nothing
+  // has been logged and the user hasn't touched the stepper themselves.
+  const plannedWeight = prescription?.plannedWeightLb ?? null
+  useEffect(() => {
+    if (touched || sets.length > 0 || plannedWeight === null) return
+    setWeight(plannedWeight)
+  }, [plannedWeight, touched, sets.length])
 
   async function logSet() {
     if (saving || weight <= 0 || reps <= 0) return
@@ -419,14 +433,25 @@ function ExercisePane({
               value={weight}
               step={exercise.weightIncrementLb}
               unit="lb"
-              onChange={setWeight}
+              onChange={(next) => {
+                setTouched(true)
+                setWeight(next)
+              }}
             />
           </div>
           <div>
             <p className="mb-2 text-xs tracking-wider text-text-secondary uppercase">
               Reps
             </p>
-            <Stepper label="Reps" value={reps} step={1} onChange={setReps} />
+            <Stepper
+              label="Reps"
+              value={reps}
+              step={1}
+              onChange={(next) => {
+                setTouched(true)
+                setReps(next)
+              }}
+            />
           </div>
         </div>
 

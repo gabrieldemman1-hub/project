@@ -76,7 +76,11 @@ export function loadDecision(
   const increment = exercise.weightIncrementLb
   // Never below one increment: a machine stack has no zero pin.
   const weightLb = Math.max(increment, top.weightLb + delta * increment)
-  const action: LoadAction = delta > 0 ? 'increase' : delta < 0 ? 'decrease' : 'hold'
+  // Derived from what actually happened to the weight, not from the intent:
+  // a below-floor decrease already sitting at the one-increment floor is a
+  // hold, and must not claim "drop to 5 lb" while prescribing the same 5 lb.
+  const action: LoadAction =
+    weightLb > top.weightLb ? 'increase' : weightLb < top.weightLb ? 'decrease' : 'hold'
 
   // Chasing reps: the explicit RIR-1 case, the conservative default when the
   // prompt was skipped, and the blocked consecutive increase — the brief says

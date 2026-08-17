@@ -199,10 +199,14 @@ describe('below the rep floor (decision A-2: it beats every other load rule)', (
     expect(result.loadAction).toBe('increase')
   })
 
-  it('never prescribes below one increment', () => {
+  it('never prescribes below one increment, and reports that honestly as a hold', () => {
     const sets = [{ weightLb: 5, reps: 4 }]
     const result = recommend(input({ last: last({ sets, rir: '0' }) }))
     expect(result.weightLb).toBe(5)
+    // The weight did not move, so the action must not claim a decrease and
+    // the sentence must not say "drop to 5 lb" while prescribing the same 5.
+    expect(result.loadAction).toBe('hold')
+    expect(result.sentence).not.toMatch(/drop to/i)
   })
 })
 
