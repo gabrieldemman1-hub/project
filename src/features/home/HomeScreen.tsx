@@ -113,9 +113,16 @@ function StartNewBlock() {
   )
 }
 
+/**
+ * The day scrubber, sitting on the date line itself since that is what it
+ * changes. It used to be its own row below the header, which cost 68px of a
+ * phone screen — the reason a five-exercise day could not fit above the
+ * action bar (owner report, from real use). Returning home lives in the
+ * action bar, in the thumb zone — one "Back to today", not two.
+ */
 function DayNav({ nav }: { nav: DayNavState }) {
   return (
-    <div className="mt-6 flex items-center gap-3">
+    <span className="flex shrink-0 items-center gap-2">
       <button
         type="button"
         aria-label="Previous day"
@@ -132,9 +139,7 @@ function DayNav({ nav }: { nav: DayNavState }) {
       >
         ›
       </button>
-      {/* Returning home lives in the action bar, in the thumb zone — one
-          "Back to today", not two. */}
-    </div>
+    </span>
   )
 }
 
@@ -251,24 +256,16 @@ function TrainingDay({
             </button>
           </div>
         ) : (
-          <>
-            <Button onClick={() => void start()} disabled={starting}>
-              {inProgress
-                ? 'Resume session'
-                : resumingOld
-                  ? 'Finish previous session'
-                  : 'Start session'}
-            </Button>
-            {!inProgress && !resumingOld ? (
-              <button
-                type="button"
-                onClick={() => void skipToday(date)}
-                className="mt-3 min-h-touch-min w-full rounded-md text-xs tracking-wider text-text-muted uppercase"
-              >
-                Skip today
-              </button>
-            ) : null}
-          </>
+          // Only the primary lives in the bar — "Skip today" sits under the
+          // exercise list instead, buying the list ~56px of viewport, which
+          // is what lets a whole day fit on an iPhone SE.
+          <Button onClick={() => void start()} disabled={starting}>
+            {inProgress
+              ? 'Resume session'
+              : resumingOld
+                ? 'Finish previous session'
+                : 'Start session'}
+          </Button>
         )
       }
     >
@@ -277,48 +274,60 @@ function TrainingDay({
         position={position}
         isToday={nav.isToday}
         dayLetter={template.letter}
+        nav={nav}
       />
-      <DayNav nav={nav} />
 
       {/* The header already states WEEK n · DAY X, so this is the muscle
           groups alone rather than a second giant letter. */}
-      <p className="mt-6 text-2xl leading-snug text-balance text-text">
+      <p className="mt-3 text-2xl leading-snug text-balance text-text">
         {template.name}
       </p>
 
       <DayStatus view={view} today={today} />
 
-      <p className="mt-3 text-sm text-text-secondary">
+      {/* Short enough to stay on one line at 375px — a wrapped meta line is
+          another row stolen from the exercise list below. */}
+      <p className="mt-2 text-sm text-text-secondary">
         {exercises.length} exercises
         <span className="mx-2 text-text-muted">·</span>
-        <span className="num">{view.cardioMinutes}</span> min incline walk to finish
+        <span className="num">{view.cardioMinutes}</span> min walk after
       </p>
 
-      <ul className="mt-8 flex flex-col gap-3">
+      {/* One line per exercise, so the whole workout fits above the action
+          bar on a phone (owner report: the old three-line cards forced a
+          scroll just to see what the day holds). Muscle group and rest time
+          live on the session screen, where they matter; here the question is
+          only "what am I doing today". Names still wrap, never truncate. */}
+      <ul className="mt-3 flex flex-col gap-2">
         {exercises.map((exercise, index) => (
           <li key={exercise.id}>
-            <Card className="flex items-start gap-4 px-5 py-4">
-              <span className="num w-5 shrink-0 text-base text-text-muted">
+            <Card className="flex items-center gap-4 px-4 py-2">
+              <span className="num w-5 shrink-0 text-sm text-text-muted">
                 {index + 1}
               </span>
-              <div className="min-w-0 flex-1">
-                {/* Never truncated — the movement name is the content. */}
-                <p className="text-base leading-snug text-balance text-text">
-                  {exercise.name}
-                </p>
-                <p className="mt-2 text-xs tracking-wider text-text-secondary uppercase">
-                  {exercise.muscleGroupName}
-                  <span className="mx-2 text-text-muted">·</span>
-                  {exercise.repTargetMin}–{exercise.repTargetMax} reps
-                </p>
-              </div>
-              <span className="num shrink-0 text-sm text-text-muted">
-                {exercise.restSeconds}s
+              <p className="min-w-0 flex-1 text-base leading-snug text-balance text-text">
+                {exercise.name}
+              </p>
+              <span className="num shrink-0 text-sm text-text-secondary">
+                {exercise.repTargetMin}–{exercise.repTargetMax}
               </span>
             </Card>
           </li>
         ))}
       </ul>
+
+      {/* The ready state's secondary action. Same reachability as the Start
+          button's else-branch above: today, nothing started or unfinished,
+          block still running. */}
+      {nav.isToday && !session && !unfinishedSession && !position?.isComplete ? (
+        <button
+          type="button"
+          onClick={() => void skipToday(date)}
+          className="mt-4 min-h-touch-min w-full rounded-md text-xs tracking-wider text-text-muted uppercase"
+        >
+          Skip today
+        </button>
+      ) : null}
 
       {nav.isToday ? <Streak streak={streak} /> : null}
     </Screen>
@@ -348,8 +357,7 @@ function RestDay({ view, nav }: { view: TodayView; nav: DayNavState }) {
         ) : undefined
       }
     >
-      <Header date={view.date} position={view.position} isToday={nav.isToday} />
-      <DayNav nav={nav} />
+      <Header date={view.date} position={view.position} isToday={nav.isToday} nav={nav} />
 
       {/* Centred in the space rather than stranded at the top — a rest day
           should look composed, not like a screen that failed to load. */}
@@ -390,11 +398,13 @@ function Header({
   position,
   isToday,
   dayLetter,
+  nav,
 }: {
   date: string
   position: TodayView['position']
   isToday: boolean
   dayLetter?: string | undefined
+  nav: DayNavState
 }) {
   return (
     <header>
@@ -423,13 +433,16 @@ function Header({
           ‹ Dashboard
         </button>
       </div>
-      <p className="mt-1 text-xs tracking-wider text-text-secondary uppercase">
-        {formatLongDate(date)}
-        {isToday ? <span className="ml-2 text-text-muted">· Today</span> : null}
-        {position?.isDeloadWeek ? (
-          <span className="ml-2 text-accent">· Deload</span>
-        ) : null}
-      </p>
+      <div className="mt-1 flex items-center justify-between gap-4">
+        <p className="text-xs tracking-wider text-text-secondary uppercase">
+          {formatLongDate(date)}
+          {isToday ? <span className="ml-2 text-text-muted">· Today</span> : null}
+          {position?.isDeloadWeek ? (
+            <span className="ml-2 text-accent">· Deload</span>
+          ) : null}
+        </p>
+        <DayNav nav={nav} />
+      </div>
     </header>
   )
 }

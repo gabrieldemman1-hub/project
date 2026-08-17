@@ -532,6 +532,26 @@ word as well as a colour. The light theme carries the same identity one step
 deeper for contrast on white. Recorded here rather than silently contradicting
 the brief.
 
+### Interlude: the day plan fits one screen (owner report, from real use)
+
+Tapping a day opened a plan you could not finish reading: three-line
+exercise cards pushed half the workout behind the pinned Start/Resume
+button. Fixed by spending the screen on the list instead of chrome —
+
+- Each exercise is now one line: number, name (wrapping, never truncated),
+  rep range. Muscle group and rest time left the overview; they live on the
+  session screen, where they matter. The question here is only "what am I
+  doing today".
+- The ‹ › day chevrons moved onto the date line — they change the date, so
+  that is where they belong — reclaiming their old 68px row.
+- "Skip today" moved out of the pinned bar to below the list: only the
+  primary action needs pinning, and the bar shrinking by 56px is what lets
+  the whole day fit on an iPhone SE.
+
+The screenshot audit now enforces it: on the day-plan screen the full
+exercise list must sit above the fold, on every phone in the sweep. 16/16,
+all proofs re-run green.
+
 ### Phase 8 notes — the Part 7 critique
 
 Every screen was re-shot and read against Part 7, line by line. The honest

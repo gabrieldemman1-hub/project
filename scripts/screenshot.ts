@@ -171,8 +171,20 @@ async function audit(page: Page, insets: Device['insets']) {
       if (visibleBottom > window.innerHeight - bottom) underHomeIndicator += 1
     }
 
+    // The day's full exercise list must be readable without scrolling (owner
+    // report: the old three-line cards buried half the workout behind the
+    // pinned action button). Only measured when the screen has a list.
+    const lastRow = Array.from(
+      document.querySelectorAll<HTMLElement>('main ul li'),
+    ).pop()
+    const listFullyVisible =
+      !lastRow ||
+      !scrollerBox ||
+      lastRow.getBoundingClientRect().bottom <= scrollerBox.bottom + 1
+
     return {
       action,
+      listFullyVisible,
       safeArea: { underNotch, underHomeIndicator },
       documentScrollsVertically:
         document.documentElement.scrollHeight > document.documentElement.clientHeight,
@@ -241,8 +253,17 @@ async function main(): Promise<void> {
     return { context, page }
   }
 
-  function report(label: string, result: Awaited<ReturnType<typeof audit>>) {
+  function report(
+    label: string,
+    result: Awaited<ReturnType<typeof audit>>,
+    options?: { requireFullList?: boolean },
+  ) {
     const problems: string[] = []
+    // Enforced on the day-plan screen only: the dashboard's boards continue
+    // past the fold by design, but the workout list is the answer to "what am
+    // I doing today" and must never need a scroll to finish reading.
+    if (options?.requireFullList && !result.listFullyVisible)
+      problems.push('exercise list runs past the fold')
     if (result.documentScrollsHorizontally) problems.push('horizontal overflow')
     if (result.documentScrollsVertically) problems.push('page scrolls')
     if (result.action.present && !result.action.withinViewport)
@@ -341,6 +362,7 @@ async function main(): Promise<void> {
         report(
           `${device.label.padEnd(18)} ${String(device.width).padStart(3)}×${device.height}  ${shot.label}`,
           result,
+          { requireFullList: shot.name === 'home-training-day' },
         )
         await context.close()
       }
