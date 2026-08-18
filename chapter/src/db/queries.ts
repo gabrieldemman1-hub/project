@@ -50,3 +50,23 @@ export async function countsForBook(
   ])
   return { logs, notes }
 }
+
+/** Every day on which a chapter was logged. Feeds ONLY the reading streak. */
+export async function readingDays(): Promise<{ dayKey: string }[]> {
+  const logs = await db.readingLogs.toArray()
+  return logs.map((l) => ({ dayKey: l.dayKey }))
+}
+
+/** Every day on which a review session was CLOSED. Feeds ONLY the review streak. */
+export async function reviewSessionDays(): Promise<{ dayKey: string }[]> {
+  const sessions = await db.sessions.where('kind').equals('review').toArray()
+  return sessions.filter((s) => s.endedAt !== null).map((s) => ({ dayKey: s.dayKey }))
+}
+
+export async function logsOnDay(dayKey: string): Promise<ReadingLog[]> {
+  return db.readingLogs.where('dayKey').equals(dayKey).toArray()
+}
+
+export async function getSettings() {
+  return db.settings.get('settings')
+}

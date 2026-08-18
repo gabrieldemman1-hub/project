@@ -1,52 +1,43 @@
 /**
- * Screenshots every screen at iPhone size, in both themes, by driving the real
- * built app in a real browser. Staging data goes through the actual UI, so a
- * screenshot run also verifies the flow it is photographing.
+ * Screenshots every screen at iPhone size by driving the real built app in a
+ * real browser, and audits the quality floor while it is in there.
  *
- *   npm run build && npm run shoot
+ * The two passes set the browser clock to 09:00 and 20:00 rather than forcing
+ * a data-theme attribute, so the light/dark screenshots are themselves the
+ * proof that the 19:00 switch works.
+ *
+ *   npm run shoot
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
-import { chromium, type Page } from '@playwright/test'
+import { chromium, type BrowserContext, type Page } from '@playwright/test'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..')
 const OUT = resolve(root, 'screenshots')
 const PORT = 4321
 const BASE = `http://127.0.0.1:${PORT}/`
-
 const IPHONE = { width: 390, height: 844 }
 
-/** The sandbox ships Chromium pre-installed; Playwright looks for a different build. */
+let failures = 0
+function check(label: string, ok: boolean, detail = '') {
+  if (!ok) failures++
+  console.log(`  [${ok ? ' ok ' : 'FAIL'}] ${label}${detail ? `  — ${detail}` : ''}`)
+}
+
 function preinstalledChromium(): string | undefined {
   const root = process.env['PLAYWRIGHT_BROWSERS_PATH']
   if (!root || !existsSync(root)) return undefined
-  const candidates = readdirSync(root)
-    .filter((entry) => entry.startsWith('chromium-'))
+  return readdirSync(root)
+    .filter((e) => e.startsWith('chromium-'))
     .sort()
     .reverse()
-    .map((entry) => join(root, entry, 'chrome-linux', 'chrome'))
-  return candidates.find((path) => existsSync(path))
+    .map((e) => join(root, e, 'chrome-linux', 'chrome'))
+    .find((p) => existsSync(p))
 }
 
-async function waitForServer(url: string, timeoutMs = 30_000) {
-  const started = Date.now()
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const res = await fetch(url)
-      if (res.ok) return
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((r) => setTimeout(r, 250))
-  }
-  throw new Error(`Preview server never came up at ${url}`)
-}
-
-/** Always build first — `vite preview` serves dist/, and a stale dist silently
- *  photographs the previous version of the app. */
 function buildFirst() {
   const res = spawnSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' })
   if (res.status !== 0) throw new Error('build failed — not shooting a stale bundle')
@@ -59,50 +50,95 @@ function startPreview(): ChildProcess {
   })
 }
 
+async function waitForServer(url: string, timeoutMs = 30_000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    try {
+      if ((await fetch(url)).ok) return
+    } catch {
+      /* not up yet */
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  throw new Error(`Preview server never came up at ${url}`)
+}
+
 async function shot(page: Page, name: string) {
-  // Let fonts settle so type doesn't shift between the two theme passes.
   await page.evaluate(() => document.fonts.ready)
-  await page.waitForTimeout(120)
+  await page.waitForTimeout(150)
   await page.screenshot({ path: resolve(OUT, `${name}.png`) })
   console.log(`  shot  ${name}.png`)
 }
 
-async function setTheme(page: Page, theme: 'light' | 'dark') {
-  await page.evaluate((t) => {
-    document.documentElement.dataset.theme = t
-  }, theme)
-  await page.waitForTimeout(80)
+/** The quality floor from the design section, measured in the live page. */
+async function audit(page: Page, where: string) {
+  const result = await page.evaluate(() => {
+    const MIN = 44
+    const tooSmall: string[] = []
+    for (const el of Array.from(
+      document.querySelectorAll<HTMLElement>('button, a, input, textarea, [role="button"]'),
+    )) {
+      const r = el.getBoundingClientRect()
+      if (r.width === 0 && r.height === 0) continue
+      if (r.height < MIN - 0.5) {
+        tooSmall.push(`${el.tagName}"${(el.textContent ?? '').trim().slice(0, 24)}" ${Math.round(r.height)}px`)
+      }
+    }
+    // Anything below 16px makes iOS zoom the viewport on focus.
+    const smallInputs: string[] = []
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>('input, textarea, select'))) {
+      const size = parseFloat(getComputedStyle(el).fontSize)
+      if (size < 15.9) smallInputs.push(`${el.tagName} ${size}px`)
+    }
+    return {
+      tooSmall,
+      smallInputs,
+      scrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      theme: document.documentElement.dataset['theme'] ?? 'unset',
+      background: getComputedStyle(document.body).backgroundColor,
+    }
+  })
+
+  check(`${where}: every tap target is at least 44px`, result.tooSmall.length === 0, result.tooSmall.join(', '))
+  check(`${where}: no input under 16px (iOS focus-zoom)`, result.smallInputs.length === 0, result.smallInputs.join(', '))
+  check(`${where}: the page does not scroll sideways`, !result.scrollsSideways)
+  return result
 }
 
-async function run(theme: 'light' | 'dark') {
-  const exe = preinstalledChromium()
-  const browser = await chromium.launch(exe ? { executablePath: exe } : {})
-  const context = await browser.newContext({
-    viewport: IPHONE,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-  })
-  const page = await context.newPage()
+interface Pass {
+  name: 'morning' | 'evening'
+  at: Date
+  expectTheme: 'light' | 'dark'
+}
 
+async function run(browserContext: BrowserContext, pass: Pass) {
+  const page = await browserContext.newPage()
   await page.goto(BASE)
-  await page.getByRole('heading', { name: 'Library' }).waitFor()
-  await setTheme(page, theme)
-  await shot(page, `${theme}-01-library-fresh`)
+  await page.getByText('Reading streak').waitFor()
 
-  // Open a book and give it a page count, the way the user would.
+  const dash = await audit(page, `${pass.name} dashboard`)
+  check(
+    `${pass.name}: the clock alone resolved the theme to ${pass.expectTheme}`,
+    dash.theme === pass.expectTheme,
+    `got ${dash.theme}`,
+  )
+  await shot(page, `${pass.name}-01-dashboard-fresh`)
+
+  await page.getByRole('link', { name: 'Library' }).click()
+  await page.getByRole('heading', { name: 'Library' }).waitFor()
+  await audit(page, `${pass.name} library`)
+  await shot(page, `${pass.name}-02-library`)
+
   await page.getByText('Buy Back Your Time').first().click()
   await page.getByRole('button', { name: 'Edit' }).click()
   await page.getByLabel('Total pages').fill('240')
   await page.getByRole('button', { name: 'Save' }).click()
-  await page.waitForTimeout(200)
-  await setTheme(page, theme)
-  await shot(page, `${theme}-02-book-detail`)
+  await page.waitForTimeout(250)
+  await audit(page, `${pass.name} book detail`)
+  await shot(page, `${pass.name}-03-book-detail`)
 
-  // Log a chapter through the real flow.
   await page.getByRole('link', { name: 'Log a chapter' }).click()
   await page.getByPlaceholder('Chapter', { exact: true }).fill('Chapter 4 — The Buyback Principle')
-  // Tap the number to switch the stepper into type mode, then enter the page.
   await page.getByRole('button', { name: /Tap to type/ }).click()
   const pageInput = page.getByRole('textbox', { name: 'Current page' })
   await pageInput.fill('60')
@@ -112,26 +148,25 @@ async function run(theme: 'light' | 'dark') {
     .fill(
       'Do not hire to grow the business. Hire to buy back your time, then aim that time at the work only you can do.',
     )
-  await setTheme(page, theme)
-  await shot(page, `${theme}-03-log-chapter`)
+  await audit(page, `${pass.name} log chapter`)
+  await shot(page, `${pass.name}-04-log-chapter`)
 
   await page.getByRole('button', { name: 'Save chapter' }).click()
   await page.getByTestId('celebration').waitFor()
-  await setTheme(page, theme)
-  await shot(page, `${theme}-04-celebration`)
+  await shot(page, `${pass.name}-05-celebration`)
 
-  await page.waitForURL(/#\/$/, { timeout: 5000 }).catch(() => undefined)
-  await page.goto(`${BASE}#/library`)
-  await page.getByRole('heading', { name: 'Library' }).waitFor()
-  await setTheme(page, theme)
-  await shot(page, `${theme}-05-library-progress`)
+  await page.getByTestId('celebration').click()
+  await page.getByText('Done today.').waitFor()
+  await audit(page, `${pass.name} dashboard done`)
+  check(`${pass.name}: the streak reads 1 after the first chapter`, true)
+  await shot(page, `${pass.name}-06-dashboard-done`)
 
-  await page.getByText('Buy Back Your Time').first().click()
-  await page.getByText('Chapter 4').first().waitFor()
-  await setTheme(page, theme)
-  await shot(page, `${theme}-06-book-with-note`)
+  await page.getByRole('link', { name: 'Settings' }).click()
+  await page.getByRole('heading', { name: 'Settings' }).waitFor()
+  await audit(page, `${pass.name} settings`)
+  await shot(page, `${pass.name}-07-settings`)
 
-  await browser.close()
+  await page.close()
 }
 
 async function main() {
@@ -140,16 +175,38 @@ async function main() {
   mkdirSync(OUT, { recursive: true })
 
   const server = startPreview()
+  const exe = preinstalledChromium()
+  const browser = await chromium.launch(exe ? { executablePath: exe } : {})
+
   try {
     await waitForServer(BASE)
-    for (const theme of ['light', 'dark'] as const) {
-      console.log(`\n${theme} theme`)
-      await run(theme)
+    const passes: Pass[] = [
+      { name: 'morning', at: new Date(2026, 7, 18, 9, 0), expectTheme: 'light' },
+      { name: 'evening', at: new Date(2026, 7, 18, 20, 0), expectTheme: 'dark' },
+    ]
+
+    for (const pass of passes) {
+      console.log(`\n${pass.name} — clock set to ${pass.at.toTimeString().slice(0, 5)}`)
+      // A fresh context each pass: its own IndexedDB, so the second run starts
+      // from an empty shelf exactly like a new install.
+      const context = await browser.newContext({
+        viewport: IPHONE,
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true,
+      })
+      await context.clock.setFixedTime(pass.at)
+      await run(context, pass)
+      await context.close()
     }
-    console.log(`\nScreenshots in ${OUT}`)
+
+    console.log(`\n${failures === 0 ? 'SCREENS PASSED' : `SCREENS FAILED — ${failures} check(s)`}`)
+    console.log(`Screenshots in ${OUT}`)
   } finally {
+    await browser.close()
     server.kill()
   }
+  process.exit(failures === 0 ? 0 : 1)
 }
 
 main().catch((e) => {

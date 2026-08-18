@@ -1,15 +1,22 @@
 import { useEffect, useState } from 'react'
 import { useRoute } from './lib/router'
+import { DashboardScreen } from './features/dashboard/DashboardScreen'
 import { LibraryScreen } from './features/library/LibraryScreen'
 import { BookDetailScreen } from './features/library/BookDetailScreen'
 import { LogChapterScreen } from './features/log/LogChapterScreen'
+import { SettingsScreen } from './features/settings/SettingsScreen'
 import { seedLibrary } from './db/mutations'
 import { ensureSettings } from './db/db'
 import { requestPersistence } from './lib/storage'
+import { useTheme } from './lib/useTheme'
+import { useLive } from './lib/useLive'
+import { getSettings } from './db/queries'
 
 export default function App() {
   const route = useRoute()
   const [ready, setReady] = useState(false)
+  const settings = useLive(() => getSettings(), [])
+  useTheme(settings)
 
   useEffect(() => {
     void (async () => {
@@ -30,17 +37,19 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', ask)
   }, [])
 
-  if (!ready) return <div className="min-h-full bg-ground" />
+  if (!ready) return <div className="min-h-dvh bg-ground" />
 
   switch (route.name) {
     case 'book':
       return <BookDetailScreen id={route.id} />
     case 'log':
       return <LogChapterScreen bookId={route.bookId} />
-    // The dashboard arrives in Phase 2; until then the library is the front door.
-    case 'home':
     case 'library':
-    default:
       return <LibraryScreen />
+    case 'settings':
+      return <SettingsScreen />
+    case 'home':
+    default:
+      return <DashboardScreen />
   }
 }

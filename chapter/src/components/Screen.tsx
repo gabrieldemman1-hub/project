@@ -18,7 +18,7 @@ interface Props {
 
 export function Screen({ title, action, back, children, footer, stickyFooter = true }: Props) {
   return (
-    <div className="min-h-full flex flex-col bg-ground text-ink">
+    <div className="min-h-dvh flex flex-col bg-ground text-ink">
       <header className="safe-top px-5 pb-2">
         {back && (
           <a
@@ -30,7 +30,8 @@ export function Screen({ title, action, back, children, footer, stickyFooter = t
         )}
         {(title || action) && (
           <div className="flex items-baseline justify-between gap-3 mt-1">
-            {title && <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>}
+            {/* Placeholder keeps the action on the right when there is no title. */}
+            {title ? <h1 className="text-2xl font-semibold tracking-tight">{title}</h1> : <span />}
             {action}
           </div>
         )}
