@@ -1,0 +1,42 @@
+{
+  "name": "chapter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsx scripts/make-tokens.ts && tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "shoot": "tsx scripts/shoot.ts",
+    "prove-phase1": "tsx scripts/prove-phase1.ts",
+    "prove-phase2": "tsx scripts/prove-phase2.ts",
+    "prove-phase3": "tsx scripts/prove-phase3.ts",
+    "prove-phase4": "tsx scripts/prove-phase4.ts",
+    "make-icons": "tsx scripts/make-icons.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/literata": "^5.2.5",
+    "dexie": "^4.4.5",
+    "dexie-react-hooks": "^4.4.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "fake-indexeddb": "^6.2.5",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "~5.9.3",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}

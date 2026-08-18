@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Chapter</title>
+    <meta name="description" content="Read a chapter. Write what mattered. Recall it at night." />
+
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+
+    <!-- iOS standalone.
+         NOT black-translucent: that paints our own background under the status
+         bar, and iOS draws WHITE glyphs over it — illegible on the cream light
+         theme every morning. 'default' lets iOS own the status bar and keep its
+         glyphs readable. The trade is that the bar follows the system appearance
+         rather than our 19:00 clock, which is a cosmetic mismatch instead of an
+         unreadable clock. The style is also only read at launch, so a runtime
+         flip was never going to work anyway. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Chapter" />
+
+    <!-- Kept in sync with the resolved theme at runtime by src/lib/theme.ts -->
+    <meta name="theme-color" content="#FBFAF8" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
