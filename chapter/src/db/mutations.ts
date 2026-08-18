@@ -3,6 +3,8 @@ import { SEED_BOOKS, SEED_VERSION } from './seed'
 import { newId } from '../lib/ids'
 import { dayKeyOf } from '../lib/day'
 import { ENRICH_DELAY_MS, fetchCoverBlob, lookup } from '../lib/openLibrary'
+import { firstReview } from '../lib/scheduler'
+import { reviewRowFor } from './reviews'
 import type { Book, Note, ProgressUnit, ReadingLog, Settings } from './schema'
 
 export function clampPercent(n: number): number {
@@ -195,7 +197,7 @@ export async function logChapter(input: LogChapterInput): Promise<LogChapterResu
   const body = input.body.trim()
   if (!body) throw new Error('A chapter log needs a note — that is the whole point.')
 
-  return db.transaction('rw', db.books, db.readingLogs, db.notes, async () => {
+  return db.transaction('rw', db.books, db.readingLogs, db.notes, db.reviews, async () => {
     const book = await db.books.get(input.bookId)
     if (!book) throw new Error(`No such book: ${input.bookId}`)
 
@@ -235,6 +237,9 @@ export async function logChapter(input: LogChapterInput): Promise<LogChapterResu
 
     await db.readingLogs.add(log)
     await db.notes.add(note)
+    // The note's first review is created in the SAME transaction. A note
+    // without a pending review would silently never come back.
+    await db.reviews.add(reviewRowFor(noteId, firstReview(dayKey), now))
     await db.books.update(book.id, {
       currentPage: book.progressUnit === 'pages' ? input.position : null,
       percentComplete: percentAfter,
@@ -254,13 +259,21 @@ export async function updateSettings(
 }
 
 /** Counted cascade — the caller shows these numbers before confirming. */
-export async function deleteBook(id: string): Promise<{ logs: number; notes: number }> {
-  return db.transaction('rw', db.books, db.readingLogs, db.notes, async () => {
+export async function deleteBook(
+  id: string,
+): Promise<{ logs: number; notes: number; reviews: number }> {
+  return db.transaction('rw', db.books, db.readingLogs, db.notes, db.reviews, async () => {
     const logs = await db.readingLogs.where('bookId').equals(id).toArray()
     const notes = await db.notes.where('bookId').equals(id).toArray()
+    const noteIds = new Set(notes.map((n) => n.id))
+    // Reviews hang off notes, not books, so they have to be found by note id
+    // or they survive their own book and come back for review forever.
+    const reviews = (await db.reviews.toArray()).filter((r) => noteIds.has(r.noteId))
+
     await db.readingLogs.bulkDelete(logs.map((l) => l.id))
     await db.notes.bulkDelete(notes.map((n) => n.id))
+    await db.reviews.bulkDelete(reviews.map((r) => r.id))
     await db.books.delete(id)
-    return { logs: logs.length, notes: notes.length }
+    return { logs: logs.length, notes: notes.length, reviews: reviews.length }
   })
 }

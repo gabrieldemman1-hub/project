@@ -14,9 +14,22 @@ interface Props {
    * ends up hidden behind the keyboard with no way to reach it.
    */
   stickyFooter?: boolean
+  /**
+   * Makes the content area a flex column, so a child with flex-1 can actually
+   * grow. Off by default because most screens are a plain stack of blocks.
+   */
+  fill?: boolean
 }
 
-export function Screen({ title, action, back, children, footer, stickyFooter = true }: Props) {
+export function Screen({
+  title,
+  action,
+  back,
+  children,
+  footer,
+  stickyFooter = true,
+  fill = false,
+}: Props) {
   return (
     <div className="min-h-dvh flex flex-col bg-ground text-ink">
       <header className="safe-top px-5 pb-2">
@@ -37,7 +50,7 @@ export function Screen({ title, action, back, children, footer, stickyFooter = t
         )}
       </header>
 
-      <main className="flex-1 px-5 pb-6">{children}</main>
+      <main className={`flex-1 px-5 pb-6 ${fill ? 'flex flex-col' : ''}`}>{children}</main>
 
       {footer && (
         <footer

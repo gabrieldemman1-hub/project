@@ -815,3 +815,4 @@ forced. Each one is now implemented and tested.
   nothing.
 - **Vercel is the install target; GitHub Pages is preview only.** Browser storage is keyed to origin,
   so moving after you have installed and started writing notes orphans every one of them.
+

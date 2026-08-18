@@ -308,10 +308,11 @@ describe('deleteBook', () => {
     await logChapter({ bookId: book.id, chapterLabel: 'Ch 2', position: 2, body: 'b' })
 
     const counts = await deleteBook(book.id)
-    expect(counts).toEqual({ logs: 2, notes: 2 })
+    expect(counts).toEqual({ logs: 2, notes: 2, reviews: 2 })
     expect(await db.books.count()).toBe(20)
     expect(await db.readingLogs.count()).toBe(0)
     expect(await db.notes.count()).toBe(0)
+    expect(await db.reviews.count()).toBe(0)
   })
 })
 

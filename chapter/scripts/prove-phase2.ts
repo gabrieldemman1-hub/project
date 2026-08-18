@@ -35,8 +35,13 @@ async function closeReviewSession(at: Date) {
     tzOffsetMinutes: at.getTimezoneOffset(),
     startedAt: at.getTime(),
     endedAt: at.getTime() + 300_000,
+    reviewIds: [],
+    currentIndex: 4,
+    revealed: false,
     served: 4,
     graded: 4,
+    heldBack: 0,
+    dueCount: 4,
     updatedAt: at.getTime(),
   })
 }

@@ -5,10 +5,11 @@ import { Cover } from '../../components/Cover'
 import { ProgressBar } from '../../components/ProgressBar'
 import { StreakNumber } from '../../components/StreakNumber'
 import { useLive } from '../../lib/useLive'
-import { readingDays, reviewSessionDays, todaysBook } from '../../db/queries'
+import { getSettings, readingDays, reviewSessionDays, todaysBook } from '../../db/queries'
+import { daysWithNothingDue, tonightsQueue } from '../../db/reviews'
 import { readingStreak, reviewStreak } from '../../lib/streaks'
 import { hasMeasurableProgress, percentLabel, progressLabel } from '../../lib/format'
-import { todayKey } from '../../lib/day'
+import { addDays, todayKey } from '../../lib/day'
 import { hrefFor } from '../../lib/router'
 
 /**
@@ -20,13 +21,22 @@ export function DashboardScreen() {
   const book = useLive(() => todaysBook(), [])
   const logDays = useLive(() => readingDays(), [])
   const sessionDays = useLive(() => reviewSessionDays(), [])
+  const exemptDays = useLive(() => daysWithNothingDue(addDays(today, -120), today), [today])
+  const queue = useLive(async () => {
+    const settings = await getSettings()
+    return tonightsQueue(today, settings?.reviewCap ?? 5)
+  }, [today])
 
-  if (logDays === undefined || sessionDays === undefined) {
+  if (logDays === undefined || sessionDays === undefined || queue === undefined) {
     return <Screen>{null}</Screen>
   }
 
   const reading = readingStreak(logDays, today)
-  const review = reviewStreak(sessionDays, today)
+  const review = reviewStreak(sessionDays, today, exemptDays ?? [])
+  // What tonight will actually serve — the cap is for the night, not the
+  // session, so this is zero once the allowance is spent.
+  const due = queue.queue.length
+  const recallIsPrimary = reading.doneToday && due > 0
 
   return (
     <Screen
@@ -40,7 +50,11 @@ export function DashboardScreen() {
       }
       footer={
         <div className="space-y-2">
-          {reading.doneToday ? (
+          {recallIsPrimary ? (
+            <LinkButton href={hrefFor({ name: 'night' })} full>
+              Recall {due} {due === 1 ? 'note' : 'notes'}
+            </LinkButton>
+          ) : reading.doneToday ? (
             <div className="text-center py-3 rounded-[var(--radius-md)] bg-accent-soft">
               <p className="text-sm font-medium text-accent-ink">Today's chapter is done.</p>
               <a
@@ -56,6 +70,15 @@ export function DashboardScreen() {
             </LinkButton>
           )}
           <div className="flex gap-2">
+            {recallIsPrimary ? (
+              <LinkButton href={hrefFor({ name: 'log', bookId: null })} variant="secondary" full>
+                Log another chapter
+              </LinkButton>
+            ) : due > 0 ? (
+              <LinkButton href={hrefFor({ name: 'night' })} variant="secondary" full>
+                Recall {due} {due === 1 ? 'note' : 'notes'}
+              </LinkButton>
+            ) : null}
             <LinkButton href={hrefFor({ name: 'library' })} variant="secondary" full>
               Library
             </LinkButton>
@@ -95,6 +118,13 @@ export function DashboardScreen() {
           <span className="tnum text-ink font-medium">
             {review.current} {review.current === 1 ? 'night' : 'nights'}
           </span>
+        </p>
+        <p className="text-xs text-ink-faint mt-1">
+          {due > 0
+            ? `${due} ${due === 1 ? 'note is' : 'notes are'} waiting${queue.heldBack > 0 ? ` of ${queue.dueCount} due` : ''}.`
+            : queue.capReached
+              ? `Tonight's ${queue.alreadyDone} are done. ${queue.heldBack} keep until tomorrow.`
+              : 'Nothing due tonight.'}
         </p>
       </div>
     </Screen>

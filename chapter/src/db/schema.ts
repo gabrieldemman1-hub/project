@@ -85,6 +85,14 @@ export interface Review {
   updatedAt: number
 }
 
+/**
+ * A night session is a PERSISTED entity, not in-memory state.
+ *
+ * iOS discards a backgrounded web app and relaunches it cold from start_url.
+ * If the queue lived in memory, locking the phone halfway through recall would
+ * come back with a different five notes — and the notes already graded would be
+ * gone from the queue while the ones not yet seen were reshuffled.
+ */
 export interface ReviewSession {
   id: string
   kind: 'review'
@@ -92,8 +100,16 @@ export interface ReviewSession {
   tzOffsetMinutes: number
   startedAt: number
   endedAt: number | null
+  /** The review rows this session committed to, in order, chosen once at start. */
+  reviewIds: string[]
+  currentIndex: number
+  /** Survives a relaunch, so a revealed note is not re-hidden mid-thought. */
+  revealed: boolean
   served: number
   graded: number
+  /** What the cap held back, so the screen can say so after a relaunch too. */
+  heldBack: number
+  dueCount: number
   updatedAt: number
 }
 

@@ -4,6 +4,7 @@ import { DashboardScreen } from './features/dashboard/DashboardScreen'
 import { LibraryScreen } from './features/library/LibraryScreen'
 import { BookDetailScreen } from './features/library/BookDetailScreen'
 import { LogChapterScreen } from './features/log/LogChapterScreen'
+import { NightSessionScreen } from './features/night/NightSessionScreen'
 import { SettingsScreen } from './features/settings/SettingsScreen'
 import { seedLibrary } from './db/mutations'
 import { ensureSettings } from './db/db'
@@ -46,6 +47,8 @@ export default function App() {
       return <LogChapterScreen bookId={route.bookId} />
     case 'library':
       return <LibraryScreen />
+    case 'night':
+      return <NightSessionScreen />
     case 'settings':
       return <SettingsScreen />
     case 'home':

@@ -14,7 +14,6 @@
     "prove-phase1": "tsx scripts/prove-phase1.ts",
     "prove-phase2": "tsx scripts/prove-phase2.ts",
     "prove-phase3": "tsx scripts/prove-phase3.ts",
-    "prove-phase4": "tsx scripts/prove-phase4.ts",
     "make-icons": "tsx scripts/make-icons.ts"
   },
   "dependencies": {

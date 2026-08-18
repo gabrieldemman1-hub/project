@@ -124,8 +124,8 @@ export function BookDetailScreen({ id }: { id: string }) {
         {confirmDelete ? (
           <div className="space-y-3">
             <p className="text-sm text-ink leading-relaxed">
-              Delete <strong>{book.title}</strong> and its {logs?.length ?? 0} logged chapters and{' '}
-              {notes?.length ?? 0} notes? This cannot be undone.
+              Delete <strong>{book.title}</strong>, its {logs?.length ?? 0} logged chapters,{' '}
+              {notes?.length ?? 0} notes and every review scheduled for them? This cannot be undone.
             </p>
             <div className="flex gap-2">
               <Button variant="secondary" className="flex-1" onClick={() => setConfirmDelete(false)}>
