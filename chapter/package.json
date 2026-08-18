@@ -14,9 +14,11 @@
     "prove-phase1": "tsx scripts/prove-phase1.ts",
     "prove-phase2": "tsx scripts/prove-phase2.ts",
     "prove-phase3": "tsx scripts/prove-phase3.ts",
+    "prove-phase4": "tsx scripts/prove-phase4.ts",
     "make-icons": "tsx scripts/make-icons.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/literata": "^5.2.5",
     "dexie": "^4.4.5",

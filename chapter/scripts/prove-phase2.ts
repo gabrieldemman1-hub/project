@@ -37,7 +37,7 @@ async function closeReviewSession(at: Date) {
     endedAt: at.getTime() + 300_000,
     reviewIds: [],
     currentIndex: 4,
-    revealed: false,
+    revealedReviewId: null,
     served: 4,
     graded: 4,
     heldBack: 0,

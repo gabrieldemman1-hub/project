@@ -1,4 +1,4 @@
-import type { Note } from '../../db/schema'
+import type { RecallItem } from '../../db/nightSession'
 import { shortDate } from '../../lib/format'
 
 /**
@@ -14,22 +14,20 @@ import { shortDate } from '../../lib/format'
  * before the reveal tap and present after it.
  */
 export function RecallCard({
-  note,
-  bookTitle,
+  item,
   revealed,
   onReveal,
 }: {
-  note: Note
-  bookTitle: string
+  item: RecallItem
   revealed: boolean
   onReveal: () => void
 }) {
   return (
     <div className="flex-1 flex flex-col">
       <div className="text-center pt-6">
-        <p className="text-sm text-ink-quiet">{bookTitle}</p>
-        <p className="text-xl font-medium mt-1.5">{note.chapterLabel}</p>
-        <p className="text-xs text-ink-faint mt-1.5">Written {shortDate(note.createdAt)}</p>
+        <p className="text-sm text-ink-quiet">{item.bookTitle}</p>
+        <p className="text-xl font-medium mt-1.5">{item.chapterLabel}</p>
+        <p className="text-xs text-ink-faint mt-1.5">Written {shortDate(item.createdAt)}</p>
       </div>
 
       {revealed ? (
@@ -38,7 +36,7 @@ export function RecallCard({
             data-testid="note-body"
             className="serif text-[1.15rem] leading-[1.7] text-ink select-text"
           >
-            {note.body}
+            {item.body}
           </p>
         </div>
       ) : (

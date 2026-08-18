@@ -1,9 +1,8 @@
 import { db } from './db'
 import { newId } from '../lib/ids'
-import { dayKeyOf, daysBetween, type DayKey } from '../lib/day'
+import { daysBetween, type DayKey } from '../lib/day'
 import {
   buildSession,
-  firstReview,
   nextReview,
   soonestDue,
   type Grade,
@@ -31,18 +30,12 @@ export function reviewRowFor(noteId: string, next: NextReview, now: number): Rev
     dueDate: next.dueDate,
     intervalIndex: next.intervalIndex,
     result: null,
+    reviewedDayKey: null,
     pending: 1,
     reviewedAt: null,
     createdAt: now,
     updatedAt: now,
   }
-}
-
-/** Called when a note is created. One pending row, from the first moment. */
-export async function scheduleFirstReview(note: Note, now = Date.now()): Promise<Review> {
-  const row = reviewRowFor(note.id, firstReview(note.dayKey), now)
-  await db.reviews.add(row)
-  return row
 }
 
 export interface GradeOutcome {
@@ -75,6 +68,7 @@ export async function gradeReview(
 
     await db.reviews.update(reviewId, {
       result: grade,
+      reviewedDayKey: reviewedOn,
       pending: 0,
       reviewedAt: now,
       updatedAt: now,
@@ -85,6 +79,65 @@ export async function gradeReview(
   })
 }
 
+export interface RecordedGrade extends GradeOutcome {
+  graded: number
+}
+
+/**
+ * Grades a review AND advances the session, in one transaction.
+ *
+ * These were two independent writes. A discard between them left the review
+ * graded while the session still claimed the note was revealed — and the
+ * session's graded counter advanced even when the grade was a replay no-op,
+ * inflating the summary and letting an empty session bank a streak night.
+ */
+export async function recordGrade(
+  sessionId: string,
+  reviewId: string,
+  grade: Grade,
+  now = Date.now(),
+): Promise<RecordedGrade | null> {
+  return db.transaction('rw', db.reviews, db.sessions, async () => {
+    const session = await db.sessions.get(sessionId)
+    if (!session) return null
+
+    const row = await db.reviews.get(reviewId)
+    if (!row || row.pending !== 1) return null
+
+    // Booked to the session's night, not the wall clock — see Review.reviewedDayKey.
+    const reviewedOn = session.dayKey
+    const next = nextReview({ intervalIndex: row.intervalIndex }, grade, reviewedOn)
+
+    await db.reviews.update(reviewId, {
+      result: grade,
+      reviewedDayKey: reviewedOn,
+      pending: 0,
+      reviewedAt: now,
+      updatedAt: now,
+    })
+    await db.reviews.add(reviewRowFor(row.noteId, next, now))
+
+    const graded = session.graded + 1
+    await db.sessions.update(sessionId, {
+      graded,
+      currentIndex: session.currentIndex + 1,
+      revealedReviewId: null,
+      updatedAt: now,
+    })
+
+    return { next, noteId: row.noteId, graded }
+  })
+}
+
+/** Records which review is revealed, so a relaunch cannot reveal a different one. */
+export async function markRevealed(
+  sessionId: string,
+  reviewId: string | null,
+  now = Date.now(),
+): Promise<void> {
+  await db.sessions.update(sessionId, { revealedReviewId: reviewId, updatedAt: now })
+}
+
 export interface TonightsQueue extends SessionQueue {
   /** Reviews already graded today, across every session. */
   alreadyDone: number
@@ -92,10 +145,10 @@ export interface TonightsQueue extends SessionQueue {
   capReached: boolean
 }
 
-/** Reviews graded today, whichever session they happened in. */
+/** Reviews booked to tonight, whichever session they happened in. */
 export async function gradedTodayCount(today: DayKey): Promise<number> {
   const rows = await db.reviews.where('pending').equals(0).toArray()
-  return rows.filter((r) => r.reviewedAt !== null && dayKeyOf(r.reviewedAt) === today).length
+  return rows.filter((r) => r.reviewedDayKey === today).length
 }
 
 /**
@@ -137,7 +190,7 @@ export async function openOrResumeSession(
     endedAt: null,
     reviewIds: queue.queue.map((r) => r.id),
     currentIndex: 0,
-    revealed: false,
+    revealedReviewId: null,
     served: queue.queue.length,
     graded: 0,
     heldBack: queue.heldBack,
@@ -164,7 +217,7 @@ export async function openEarlySession(
     endedAt: null,
     reviewIds: queue.map((r) => r.id),
     currentIndex: 0,
-    revealed: false,
+    revealedReviewId: null,
     served: queue.length,
     graded: 0,
     heldBack: 0,
@@ -175,12 +228,36 @@ export async function openEarlySession(
   return session
 }
 
-export async function saveSessionProgress(
-  sessionId: string,
-  patch: Partial<Pick<ReviewSession, 'currentIndex' | 'revealed' | 'graded'>>,
+/**
+ * Closes or discards every session left hanging open.
+ *
+ * Nothing closed a session when the user simply navigated away — a hash change
+ * fires neither pagehide nor visibilitychange — and openOrResumeSession only
+ * looks at today, so an abandoned session became unreachable AND uncounted:
+ * you graded two notes and the streak broke anyway.
+ *
+ * @param throughDay settle sessions on or before this day. Pass yesterday to
+ *        sweep stale ones on launch; pass today when the night is over.
+ */
+export async function settleOpenSessions(
+  throughDay: DayKey,
   now = Date.now(),
-): Promise<void> {
-  await db.sessions.update(sessionId, { ...patch, updatedAt: now })
+): Promise<{ closed: number; discarded: number }> {
+  const open = (await db.sessions.toArray()).filter(
+    (s) => s.endedAt === null && s.dayKey <= throughDay,
+  )
+  let closed = 0
+  let discarded = 0
+  for (const s of open) {
+    if (s.graded > 0) {
+      await closeSession(s.id, now)
+      closed++
+    } else {
+      await db.sessions.delete(s.id)
+      discarded++
+    }
+  }
+  return { closed, discarded }
 }
 
 /**
@@ -224,7 +301,9 @@ export async function daysWithNothingDue(from: DayKey, to: DayKey): Promise<DayK
     const outstanding = rows.some(
       (r) =>
         r.dueDate <= day &&
-        (r.reviewedAt === null || dayKeyOf(r.reviewedAt) >= day),
+        // Booked day, not wall clock: a review graded at 00:05 belongs to the
+        // night it was part of, and must not make the NEW day look busy.
+        (r.reviewedDayKey === null || r.reviewedDayKey >= day),
     )
     if (!outstanding) out.push(day)
   }

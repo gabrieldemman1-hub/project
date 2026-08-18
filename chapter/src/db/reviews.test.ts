@@ -7,11 +7,15 @@ import {
   closeSession,
   daysWithNothingDue,
   gradeReview,
+  markRevealed,
   openEarlySession,
   openOrResumeSession,
   pendingReviews,
+  recordGrade,
+  settleOpenSessions,
   tonightsQueue,
 } from './reviews'
+import { hydrateSession } from './nightSession'
 import { dayKeyOf } from '../lib/day'
 
 const DAY0 = new Date(2026, 7, 18, 8, 0)
@@ -310,5 +314,187 @@ describe('the one-pending invariant holds under arbitrary use', () => {
         expect(await pendingFor(note.id)).toHaveLength(1)
       }
     }
+  })
+})
+
+describe('an abandoned session is never left open and uncounted', () => {
+  it('closes a session from a previous day that had work in it', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await db.sessions.update(s.id, { graded: 2 })
+
+    // The user tapped Home and never came back that night.
+    const settled = await settleOpenSessions(key(1), at(2).getTime())
+    expect(settled.closed).toBe(1)
+    expect((await db.sessions.get(s.id))!.endedAt).not.toBeNull()
+  })
+
+  it('discards a session nobody graded anything in', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    const settled = await settleOpenSessions(key(1), at(2).getTime())
+    expect(settled.discarded).toBe(1)
+    expect(await db.sessions.get(s.id)).toBeUndefined()
+  })
+
+  it('leaves tonight alone when only stale days are swept', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await settleOpenSessions(key(0), at(1).getTime())
+    expect((await db.sessions.get(s.id))!.endedAt).toBeNull()
+  })
+
+  it('a night the user earned still counts toward the streak', async () => {
+    const books = await allBooks()
+    for (let i = 0; i < 3; i++) {
+      await logChapter({
+        bookId: books[i]!.id,
+        chapterLabel: `Ch ${i}`,
+        position: 5,
+        body: `idea ${i}`,
+        now: at(0).getTime(),
+      })
+    }
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await recordGrade(s.id, s.reviewIds[0]!, 'got_it', at(1).getTime())
+    // Walked away without finishing.
+    await settleOpenSessions(key(1), at(1).getTime())
+
+    const closed = (await db.sessions.toArray()).filter((x) => x.endedAt !== null)
+    expect(closed).toHaveLength(1)
+    expect(closed[0]!.dayKey).toBe(key(1))
+  })
+})
+
+describe('recordGrade — one transaction, honest counters', () => {
+  it('advances the review and the session together', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    const out = await recordGrade(s.id, s.reviewIds[0]!, 'got_it', at(1).getTime())
+
+    expect(out?.graded).toBe(1)
+    const after = (await db.sessions.get(s.id))!
+    expect(after.graded).toBe(1)
+    expect(after.currentIndex).toBe(1)
+    expect(after.revealedReviewId).toBeNull()
+  })
+
+  it('a replay does NOT inflate the session’s graded count', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await recordGrade(s.id, s.reviewIds[0]!, 'got_it', at(1).getTime())
+    const replay = await recordGrade(s.id, s.reviewIds[0]!, 'got_it', at(1).getTime())
+
+    expect(replay).toBeNull()
+    expect((await db.sessions.get(s.id))!.graded).toBe(1)
+  })
+
+  it('books the grade to the SESSION’s night, not the wall clock', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    // Graded five minutes after midnight — a different calendar day.
+    const justAfterMidnight = at(2).getTime()
+    await recordGrade(s.id, s.reviewIds[0]!, 'got_it', justAfterMidnight)
+
+    const graded = (await db.reviews.toArray()).find((r) => r.pending === 0)!
+    expect(graded.reviewedDayKey).toBe(key(1))
+    expect(graded.reviewedAt).toBe(justAfterMidnight)
+  })
+
+  it('a session that straddles midnight does not make the new day look busy', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await recordGrade(s.id, s.reviewIds[0]!, 'got_it', at(2).getTime())
+    // Next due is day 4, so day 2 and 3 have nothing outstanding.
+    const exempt = await daysWithNothingDue(key(2), key(3))
+    expect(exempt).toEqual([key(2), key(3)])
+  })
+
+  it('returns null for a session that no longer exists', async () => {
+    await writeNote()
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await db.sessions.delete(s.id)
+    expect(await recordGrade(s.id, s.reviewIds[0]!, 'got_it')).toBeNull()
+  })
+})
+
+describe('the revealed flag is bound to a review, not to a position', () => {
+  it('restores a reveal only for the note it was recorded against', async () => {
+    const books = await allBooks()
+    for (let i = 0; i < 2; i++) {
+      await logChapter({
+        bookId: books[i]!.id,
+        chapterLabel: `Ch ${i}`,
+        position: 5,
+        body: `idea ${i}`,
+        now: at(0).getTime(),
+      })
+    }
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await markRevealed(s.id, s.reviewIds[0]!)
+
+    const first = await hydrateSession((await db.sessions.get(s.id))!, key(1), 5)
+    expect(first.revealed).toBe(true)
+    expect(first.items[0]!.reviewId).toBe(s.reviewIds[0])
+  })
+
+  it('does NOT reveal the next note when the flag survives a grade', async () => {
+    // The exact crash window: the review is graded, the flag was not cleared.
+    const books = await allBooks()
+    for (let i = 0; i < 2; i++) {
+      await logChapter({
+        bookId: books[i]!.id,
+        chapterLabel: `Ch ${i}`,
+        position: 5,
+        body: `idea ${i}`,
+        now: at(0).getTime(),
+      })
+    }
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await markRevealed(s.id, s.reviewIds[0]!)
+    await gradeReview(s.reviewIds[0]!, 'got_it', key(1), at(1).getTime())
+    // Simulate the session row never being updated.
+    await db.sessions.update(s.id, { revealedReviewId: s.reviewIds[0]! })
+
+    const resumed = await hydrateSession((await db.sessions.get(s.id))!, key(1), 5)
+    expect(resumed.items[0]!.reviewId).toBe(s.reviewIds[1])
+    expect(resumed.revealed).toBe(false)
+  })
+
+  it('does not reveal anything when the note behind the flag was deleted', async () => {
+    const books = await allBooks()
+    await logChapter({ bookId: books[0]!.id, chapterLabel: 'a', position: 1, body: 'one', now: at(0).getTime() })
+    await logChapter({ bookId: books[1]!.id, chapterLabel: 'b', position: 1, body: 'two', now: at(0).getTime() })
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    await markRevealed(s.id, s.reviewIds[0]!)
+    await deleteBook(books[0]!.id)
+
+    const resumed = await hydrateSession((await db.sessions.get(s.id))!, key(1), 5)
+    expect(resumed.revealed).toBe(false)
+  })
+})
+
+describe('a resumed session reports honest numbers', () => {
+  it('recomputes what is still due rather than trusting the frozen row', async () => {
+    const books = await allBooks()
+    for (let i = 0; i < 12; i++) {
+      await logChapter({
+        bookId: books[i]!.id,
+        chapterLabel: `Ch ${i}`,
+        position: 5,
+        body: `idea ${i}`,
+        now: at(0).getTime(),
+      })
+    }
+    const s = await openOrResumeSession(key(1), 5, at(1).getTime())
+    expect(s.dueCount).toBe(12)
+
+    await recordGrade(s.id, s.reviewIds[0]!, 'got_it', at(1).getTime())
+    await recordGrade(s.id, s.reviewIds[1]!, 'got_it', at(1).getTime())
+
+    const resumed = await hydrateSession((await db.sessions.get(s.id))!, key(1), 5)
+    expect(resumed.items).toHaveLength(3)
+    // 12 written, 2 graded and rescheduled — 10 are still due.
+    expect(resumed.dueCount).toBe(10)
   })
 })

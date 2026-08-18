@@ -78,6 +78,13 @@ export interface Review {
   intervalIndex: number
   /** null while pending. Kept forever once graded. */
   result: Grade | null
+  /**
+   * The day this grade was booked to — the SESSION's day, not the wall clock at
+   * tap time. A session that starts at 23:58 and finishes at 00:03 belongs to
+   * one night, and splitting it across two would break the review streak on
+   * both sides.
+   */
+  reviewedDayKey: DayKey | null
   /** 1 while pending, 0 once graded. Indexed; `result` is not. */
   pending: Flag
   reviewedAt: number | null
@@ -103,8 +110,17 @@ export interface ReviewSession {
   /** The review rows this session committed to, in order, chosen once at start. */
   reviewIds: string[]
   currentIndex: number
-  /** Survives a relaunch, so a revealed note is not re-hidden mid-thought. */
-  revealed: boolean
+  /**
+   * WHICH review is revealed, not merely that something is.
+   *
+   * A bare boolean is restored blind on relaunch, and the resumed item list is
+   * rebuilt from whatever is still pending rather than from currentIndex — so
+   * if the app dies between grading a row and clearing the flag, the NEXT note
+   * comes back already revealed, with its body in the DOM and a grade bar
+   * mounted for a note nobody tried to recall. Binding it to an id makes the
+   * mismatch unrepresentable.
+   */
+  revealedReviewId: string | null
   served: number
   graded: number
   /** What the cap held back, so the screen can say so after a relaunch too. */

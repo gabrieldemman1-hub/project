@@ -352,7 +352,30 @@ async function partB() {
     check('while promising nothing was marked missed', /nothing was marked missed/i.test(capped))
     await page.screenshot({ path: resolve(root, 'screenshots/night-04-cap-reached.png') })
 
-    section('B8. Genuinely nothing due')
+    section('B8. Walking away mid-session still banks the night')
+    // A hash change fires neither pagehide nor visibilitychange, so tapping
+    // "Home" after grading used to strand the session open and uncounted —
+    // the user did the work and the streak broke anyway.
+    await context.clock.setFixedTime(new Date(2026, 7, 20, 20, 30))
+    await page.goto(`${BASE}#/`)
+    await page.getByText('Reading streak').waitFor()
+    await page.getByRole('link', { name: /Recall \d+ notes?/ }).first().click()
+    await page.getByTestId('reveal').waitFor()
+    await page.getByTestId('reveal').click()
+    await page.getByTestId('note-body').waitFor()
+    await page.getByRole('button', { name: 'Got it' }).click()
+    await page.waitForTimeout(900)
+
+    // Leave by tapping the back link, not by reloading.
+    await page.getByRole('link', { name: /Home/ }).click()
+    await page.getByText('Reading streak').waitFor()
+    await page.waitForTimeout(400)
+    const banked = await page.evaluate(() => document.body.innerText)
+    check('the night the user earned is credited, not lost',
+      /Review streak\s+[1-9]/.test(banked.replace(/\n/g, ' ')),
+      banked.split('\n').find((l) => /Review streak/.test(l)) ?? '')
+
+    section('B9. Genuinely nothing due, and reviewing early anyway')
     // Rewind to the morning the notes were written: none of them were due yet.
     await context.clock.setFixedTime(new Date(2026, 7, 18, 9, 0))
     await page.goto(`${BASE}#/`)
@@ -363,6 +386,17 @@ async function partB() {
     check('it says so plainly', /Nothing due tonight/.test(nothing))
     check('and offers to review early anyway', /Review something early/.test(nothing))
     await page.screenshot({ path: resolve(root, 'screenshots/night-05-nothing-due.png') })
+
+    // The control has to actually work, not just render.
+    await page.getByRole('button', { name: 'Review something early' }).click()
+    await page.getByTestId('reveal').waitFor()
+    const early = await page.evaluate((bodies: string[]) => ({
+      hidden: bodies.filter((b) => document.documentElement.outerHTML.includes(b)).length,
+      gradeBar: document.querySelector('[data-testid="grade-bar"]') !== null,
+    }), NOTES)
+    check('reviewing early serves a real card', true)
+    check('and it is hidden exactly like a due one', early.hidden === 0 && !early.gradeBar)
+    await page.screenshot({ path: resolve(root, 'screenshots/night-06-early.png') })
 
     await context.close()
   } finally {

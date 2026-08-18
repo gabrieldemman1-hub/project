@@ -11,6 +11,7 @@ import { allBooks, todaysBook } from '../../db/queries'
 import { logChapter } from '../../db/mutations'
 import { hrefFor, navigate } from '../../lib/router'
 import { clearDraft, readDraft, writeDraft } from '../../lib/draft'
+import { NO_SERVER, serverFeatures, type ServerFeatures } from '../../lib/api'
 import type { Book } from '../../db/schema'
 
 export function LogChapterScreen({ bookId }: { bookId: string | null }) {
@@ -25,7 +26,13 @@ export function LogChapterScreen({ bookId }: { bookId: string | null }) {
   const [error, setError] = useState<string | null>(null)
   const [celebrate, setCelebrate] = useState<{ from: number; to: number; title: string } | null>(null)
   const [restored, setRestored] = useState(false)
+  const [features, setFeatures] = useState<ServerFeatures>(NO_SERVER)
   const draftLoaded = useRef(false)
+
+  // Voice only exists where a transcription route is actually deployed.
+  useEffect(() => {
+    void serverFeatures().then(setFeatures)
+  }, [])
 
   // Restore an unfinished note before anything else touches the fields. iOS
   // relaunches a discarded app cold, so this is a normal path, not an edge case.
@@ -169,7 +176,7 @@ export function LogChapterScreen({ bookId }: { bookId: string | null }) {
             )}
 
             <Field label="The one idea worth keeping">
-              <NoteEditor value={body} onChange={setBody} />
+              <NoteEditor value={body} onChange={setBody} voice={features.transcribe} />
             </Field>
           </>
         )}

@@ -27,16 +27,30 @@ export function DashboardScreen() {
     return tonightsQueue(today, settings?.reviewCap ?? 5)
   }, [today])
 
-  if (logDays === undefined || sessionDays === undefined || queue === undefined) {
+  const settings = useLive(() => getSettings(), [])
+
+  // exemptDays is part of the answer, not an embellishment: without it a streak
+  // currently bridged by a nothing-due night renders as 0 and then jumps.
+  if (
+    logDays === undefined ||
+    sessionDays === undefined ||
+    queue === undefined ||
+    exemptDays === undefined
+  ) {
     return <Screen>{null}</Screen>
   }
 
   const reading = readingStreak(logDays, today)
-  const review = reviewStreak(sessionDays, today, exemptDays ?? [])
+  const review = reviewStreak(sessionDays, today, exemptDays)
   // What tonight will actually serve — the cap is for the night, not the
   // session, so this is zero once the allowance is spent.
   const due = queue.queue.length
-  const recallIsPrimary = reading.doneToday && due > 0
+  // Recall is a NIGHT ritual: retrieval before sleep is the point, and the dark
+  // screen is the signal. Before the switchover hour the count is stated but
+  // the app does not push you into it.
+  const isNight = new Date().getHours() >= (settings?.darkFromHour ?? 19)
+  const offerRecall = due > 0 && isNight
+  const recallIsPrimary = reading.doneToday && offerRecall
 
   return (
     <Screen
@@ -74,7 +88,7 @@ export function DashboardScreen() {
               <LinkButton href={hrefFor({ name: 'log', bookId: null })} variant="secondary" full>
                 Log another chapter
               </LinkButton>
-            ) : due > 0 ? (
+            ) : offerRecall ? (
               <LinkButton href={hrefFor({ name: 'night' })} variant="secondary" full>
                 Recall {due} {due === 1 ? 'note' : 'notes'}
               </LinkButton>
@@ -121,7 +135,7 @@ export function DashboardScreen() {
         </p>
         <p className="text-xs text-ink-faint mt-1">
           {due > 0
-            ? `${due} ${due === 1 ? 'note is' : 'notes are'} waiting${queue.heldBack > 0 ? ` of ${queue.dueCount} due` : ''}.`
+            ? `${due} ${due === 1 ? 'note is' : 'notes are'} waiting${queue.heldBack > 0 ? ` of ${queue.dueCount} due` : ''}${isNight ? '.' : ` — recall opens at ${settings?.darkFromHour ?? 19}:00.`}`
             : queue.capReached
               ? `Tonight's ${queue.alreadyDone} are done. ${queue.heldBack} keep until tomorrow.`
               : 'Nothing due tonight.'}

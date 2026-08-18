@@ -1,41 +1,38 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Screen } from '../../components/Screen'
 import { Button } from '../../components/Button'
 import { EmptyState } from '../../components/EmptyState'
 import { RecallCard } from './RecallCard'
 import { GradeBar } from './GradeBar'
 import { SessionSummary } from './SessionSummary'
-import { db } from '../../db/db'
+import { AiCheck } from './AiCheck'
 import {
   abandonSession,
   closeSession,
   daysWithNothingDue,
-  gradeReview,
-  notesByIds,
+  markRevealed,
   openEarlySession,
   openOrResumeSession,
-  reviewsByIds,
+  recordGrade,
+  settleOpenSessions,
   tonightsQueue,
 } from '../../db/reviews'
+import { hydrateSession, type RecallItem } from '../../db/nightSession'
 import { getSettings, reviewSessionDays } from '../../db/queries'
 import { reviewStreak } from '../../lib/streaks'
 import { addDays, todayKey } from '../../lib/day'
 import { hrefFor } from '../../lib/router'
+import { NO_SERVER, serverFeatures, type ServerFeatures } from '../../lib/api'
 import type { Grade } from '../../lib/scheduler'
-import type { Note, ReviewSession } from '../../db/schema'
-
-interface Item {
-  reviewId: string
-  note: Note
-  bookTitle: string
-}
 
 type Phase = 'loading' | 'nothing-due' | 'cap-reached' | 'recalling' | 'summary'
 
+const FLASH_MS = 700
+
 export function NightSessionScreen() {
   const [phase, setPhase] = useState<Phase>('loading')
-  const [session, setSession] = useState<ReviewSession | null>(null)
-  const [items, setItems] = useState<Item[]>([])
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [items, setItems] = useState<RecallItem[]>([])
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
@@ -44,25 +41,17 @@ export function NightSessionScreen() {
   const [heldBack, setHeldBack] = useState(0)
   const [dueCount, setDueCount] = useState(0)
   const [streak, setStreak] = useState(0)
+  const [features, setFeatures] = useState<ServerFeatures>(NO_SERVER)
 
-  /** Resolves a session's frozen review ids into cards, skipping any already graded. */
-  const hydrate = useCallback(async (s: ReviewSession) => {
-    const reviews = await reviewsByIds(s.reviewIds)
-    const stillPending = s.reviewIds
-      .map((id) => reviews.get(id))
-      .filter((r): r is NonNullable<typeof r> => r !== undefined && r.pending === 1)
+  // Leaving the screen must never strand an open session. A hash change fires
+  // neither pagehide nor visibilitychange, so the unmount cleanup is what
+  // actually banks a night the user earned by tapping "Home" after two grades.
+  const liveSession = useRef<string | null>(null)
+  const finished = useRef(false)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    const notes = await notesByIds(stillPending.map((r) => r.noteId))
-    const books = await db.books.toArray()
-    const titleOf = new Map(books.map((b) => [b.id, b.title]))
-
-    const resolved: Item[] = []
-    for (const r of stillPending) {
-      const note = notes.get(r.noteId)
-      if (!note) continue // the book was deleted out from under it
-      resolved.push({ reviewId: r.id, note, bookTitle: titleOf.get(note.bookId) ?? 'A book' })
-    }
-    return resolved
+  useEffect(() => {
+    void serverFeatures().then(setFeatures)
   }, [])
 
   useEffect(() => {
@@ -71,41 +60,56 @@ export function NightSessionScreen() {
       const settings = await getSettings()
       const cap = settings?.reviewCap ?? 5
 
+      // Anything left open on a previous day is settled before we look at tonight.
+      await settleOpenSessions(addDays(today, -1))
+
       const queue = await tonightsQueue(today, cap)
-      if (queue.nothingDue) {
-        setPhase('nothing-due')
-        return
-      }
-      if (queue.capReached) {
+
+      if (queue.nothingDue || queue.capReached) {
+        // Nothing more will be served, so bank whatever was done tonight
+        // instead of leaving a session open and uncounted.
+        await settleOpenSessions(today)
         setDueCount(queue.dueCount)
         setHeldBack(queue.heldBack)
         setGraded(queue.alreadyDone)
-        setPhase('cap-reached')
+        setPhase(queue.nothingDue ? 'nothing-due' : 'cap-reached')
         return
       }
 
-      const s = await openOrResumeSession(today, cap)
-      const resolved = await hydrate(s)
-      setSession(s)
-      setItems(resolved)
-      setGraded(s.graded)
-      setHeldBack(s.heldBack)
-      setDueCount(s.dueCount)
-      // A revealed card stays revealed across a relaunch — being re-hidden
-      // mid-thought would be worse than seeing it a second time.
-      setRevealed(s.revealed && resolved.length > 0)
-      setPhase(resolved.length === 0 ? 'summary' : 'recalling')
-      if (resolved.length === 0) await finish(s, s.graded)
+      const session = await openOrResumeSession(today, cap)
+      const hydrated = await hydrateSession(session, today, cap)
+
+      liveSession.current = session.id
+      setSessionId(session.id)
+      setItems(hydrated.items)
+      setGraded(session.graded)
+      setHeldBack(hydrated.heldBack)
+      setDueCount(hydrated.dueCount)
+      setRevealed(hydrated.revealed)
+
+      if (hydrated.items.length === 0) {
+        await finish(session.id, session.graded)
+      } else {
+        setPhase('recalling')
+      }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** Bank the night if any work was done; discard an untouched session. */
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current)
+      const id = liveSession.current
+      if (id && !finished.current) void abandonSession(id)
+    },
+    [],
+  )
+
+  // Backgrounding is the other way out, and the one iOS takes most often.
   useEffect(() => {
-    if (!session || phase !== 'recalling') return
+    if (!sessionId || phase !== 'recalling') return
     const onHidden = () => {
-      if (document.visibilityState !== 'hidden') return
-      if (graded > 0) void closeSession(session.id)
+      if (document.visibilityState === 'hidden' && graded > 0) void closeSession(sessionId)
     }
     window.addEventListener('pagehide', onHidden)
     document.addEventListener('visibilitychange', onHidden)
@@ -113,14 +117,14 @@ export function NightSessionScreen() {
       window.removeEventListener('pagehide', onHidden)
       document.removeEventListener('visibilitychange', onHidden)
     }
-  }, [session, phase, graded])
+  }, [sessionId, phase, graded])
 
-  async function finish(s: ReviewSession, gradedCount: number) {
-    if (gradedCount > 0) {
-      await closeSession(s.id)
-    } else {
-      await abandonSession(s.id)
-    }
+  async function finish(id: string, gradedCount: number) {
+    finished.current = true
+    liveSession.current = null
+    if (gradedCount > 0) await closeSession(id)
+    else await abandonSession(id)
+
     const today = todayKey(new Date())
     const [sessionDays, exempt] = await Promise.all([
       reviewSessionDays(),
@@ -132,55 +136,55 @@ export function NightSessionScreen() {
 
   async function grade(g: Grade) {
     const item = items[index]
-    if (!session || !item || busy) return
+    if (!sessionId || !item || busy) return
     setBusy(true)
+    try {
+      // One transaction: the grade and the session's progress move together.
+      const outcome = await recordGrade(sessionId, item.reviewId, g)
+      if (!outcome) return // a replay — already graded, nothing to advance
 
-    const outcome = await gradeReview(item.reviewId, g, todayKey(new Date()))
-    const nextGraded = graded + 1
-    setGraded(nextGraded)
-    await db.sessions.update(session.id, {
-      graded: nextGraded,
-      currentIndex: index + 1,
-      revealed: false,
-      updatedAt: Date.now(),
-    })
+      setGraded(outcome.graded)
+      setFlash(outcome.next.sentence)
 
-    setFlash(outcome?.next.sentence ?? null)
-    setBusy(false)
-
-    window.setTimeout(() => {
-      setFlash(null)
+      // Clear the revealed state NOW, before any await, so the grade bar cannot
+      // be reached a second time for a note that has already been graded.
+      setRevealed(false)
       const nextIndex = index + 1
-      if (nextIndex >= items.length) {
-        void finish(session, nextGraded)
-      } else {
-        setIndex(nextIndex)
-        setRevealed(false)
-      }
-    }, 700)
+      setIndex(nextIndex)
+
+      flashTimer.current = setTimeout(() => {
+        setFlash(null)
+        if (nextIndex >= items.length) void finish(sessionId, outcome.graded)
+      }, FLASH_MS)
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function reveal() {
+    const item = items[index]
+    if (!item) return
     setRevealed(true)
-    if (session) {
-      await db.sessions.update(session.id, { revealed: true, updatedAt: Date.now() })
-    }
+    if (sessionId) await markRevealed(sessionId, item.reviewId)
   }
 
   async function startEarly() {
     const today = todayKey(new Date())
     const settings = await getSettings()
-    const s = await openEarlySession(today, settings?.reviewCap ?? 5)
-    const resolved = await hydrate(s)
-    if (resolved.length === 0) {
-      await abandonSession(s.id)
+    const cap = settings?.reviewCap ?? 5
+    const session = await openEarlySession(today, cap)
+    const hydrated = await hydrateSession(session, today, cap)
+    if (hydrated.items.length === 0) {
+      await abandonSession(session.id)
       return
     }
-    setSession(s)
-    setItems(resolved)
+    finished.current = false
+    liveSession.current = session.id
+    setSessionId(session.id)
+    setItems(hydrated.items)
     setGraded(0)
     setHeldBack(0)
-    setDueCount(resolved.length)
+    setDueCount(hydrated.items.length)
     setIndex(0)
     setRevealed(false)
     setPhase('recalling')
@@ -248,7 +252,12 @@ export function NightSessionScreen() {
               {flash}
             </p>
           ) : revealed ? (
-            <GradeBar onGrade={grade} busy={busy} />
+            <div className="space-y-2">
+              {features.grade && (
+                <AiCheck key={item.reviewId} noteBody={item.body} onAccept={grade} />
+              )}
+              <GradeBar onGrade={grade} busy={busy} />
+            </div>
           ) : (
             <p className="text-center text-xs text-ink-faint py-5 min-h-[3.75rem] flex items-center justify-center">
               Recall first. Grading opens after you reveal.
@@ -262,12 +271,7 @@ export function NightSessionScreen() {
         </div>
       }
     >
-      <RecallCard
-        note={item.note}
-        bookTitle={item.bookTitle}
-        revealed={revealed}
-        onReveal={reveal}
-      />
+      <RecallCard item={item} revealed={revealed} onReveal={reveal} />
     </Screen>
   )
 }

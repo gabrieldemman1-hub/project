@@ -171,8 +171,12 @@ async function run(browserContext: BrowserContext, pass: Pass) {
 
 async function main() {
   buildFirst()
-  rmSync(OUT, { recursive: true, force: true })
+  // Only clear this script's own output. prove-phase3 and prove-phase4 write
+  // night-*.png and phase4-*.png into the same directory.
   mkdirSync(OUT, { recursive: true })
+  for (const file of readdirSync(OUT)) {
+    if (/^(morning|evening)-/.test(file)) rmSync(resolve(OUT, file))
+  }
 
   const server = startPreview()
   const exe = preinstalledChromium()

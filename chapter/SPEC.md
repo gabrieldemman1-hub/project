@@ -816,3 +816,84 @@ forced. Each one is now implemented and tested.
 - **Vercel is the install target; GitHub Pages is preview only.** Browser storage is keyed to origin,
   so moving after you have installed and started writing notes orphans every one of them.
 
+---
+
+## 13. What the Phase 3 subagent review changed
+
+The brief asks for a fresh-context review of each phase's diff before it is called done. These are
+the findings that survived, and what each one now does instead. All are implemented and tested.
+
+- **Sessions were being stranded open, and the review streak silently lost nights that were earned.**
+  Tapping "Home" after grading two notes is a hash change, which fires neither `pagehide` nor
+  `visibilitychange`; nothing closed the session, and `openOrResumeSession` only ever looks at today,
+  so it became unreachable and uncounted. Now: a React unmount cleanup settles the live session,
+  `settleOpenSessions` sweeps anything stale on launch, and the nothing-due and cap-reached paths bank
+  the night before returning instead of short-circuiting past the recovery.
+- **The persisted `revealed` flag was a bare boolean, and could reveal the wrong note.** The resumed
+  item list is rebuilt from whatever is still pending, not from the stored index, so if the app was
+  discarded between grading a row and clearing the flag, the *next* note came back already revealed —
+  body in the DOM, grade bar mounted, for a note nobody tried to recall. That is exactly what §6.5
+  exists to prevent. It is now `revealedReviewId`, and the reveal is restored only when the id matches
+  the note actually being served.
+- **Grading was two independent writes, and counted replays as work.** `recordGrade` now advances the
+  review and the session in one transaction and returns null on a replay, so the summary cannot report
+  six notes for five and an empty session cannot bank a streak night.
+- **A resumed session stated the wrong held-back numbers.** It mixed a live count with frozen ones and
+  could say "3 of 40" when 38 were due. The figures are recomputed at hydrate time — the cap is
+  visible leniency, not a lie.
+- **`NightSessionScreen` imported Dexie directly**, against §3 rule 2. Session resolution moved to
+  `src/db/nightSession.ts`, which is also what made the atomic write natural rather than ad hoc.
+- **A failed grade write locked the grade bar forever.** `setBusy(true)` had no `finally`.
+- **The dashboard rendered the review streak before its exemption data loaded**, so a streak bridged by
+  a nothing-due night flashed as zero.
+- **The recall action was not gated on 19:00**, which §7.1 requires and which the whole "the dark
+  screen is the signal" framing depends on. Before the switchover hour the count is still stated —
+  "5 notes are waiting — recall opens at 19:00" — but the app does not push you into a night ritual at
+  breakfast.
+- **Grading across local midnight cost a streak night.** A grade at 00:05 credited yesterday's session
+  while making the new day look busy, so it was neither active nor exempt. Reviews now carry
+  `reviewedDayKey`, booked to the session's night, and the exemption reads that rather than the wall
+  clock.
+- **A dead `scheduleFirstReview` export** would have given a note two pending reviews if anything ever
+  called it. Deleted.
+
+The review also confirmed what it could not break: the 1/4/11/25/55 sequence, scheduling from the real
+review date, the interval index staying inside 0–4 even for a corrupted row, the one-pending invariant
+under a replay or a race, and — apart from the flag above — that no route, keyboard path or race
+reaches a grade before a render.
+
+---
+
+## 14. Deploying it
+
+**Vercel is the install target. GitHub Pages is preview only.** Browser storage is keyed to origin, so
+moving after you have installed the app and started writing notes orphans every one of them. Decide
+once, before the first note.
+
+```
+npm install
+npm run build          # tokens, typecheck, bundle
+npm run dev            # local
+```
+
+**Static hosting (GitHub Pages, Netlify drop, anywhere).** Phases 1–3 are the whole app and need no
+server. Set `VITE_BASE_PATH` if it is served from a subdirectory. `/api/health` will 404, and voice
+capture and AI grading hide themselves — the app is complete without them.
+
+**Vercel, for Phase 4.** `vercel.json` is checked in; the functions in `api/` deploy automatically.
+Set these environment variables in the project, server-side only:
+
+| Variable | For | Notes |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | AI recall grading | Without it, `/api/grade` returns 503 and the feature hides |
+| `TRANSCRIBE_URL` | Voice notes | Any OpenAI-compatible `/audio/transcriptions` endpoint |
+| `TRANSCRIBE_KEY` | Voice notes | Bearer token for the above |
+| `TRANSCRIBE_MODEL` | Voice notes | Optional, defaults to `whisper-1` |
+
+Transcription is deliberately provider-neutral: Anthropic has no speech-to-text API, and the app
+should not be married to whichever vendor is cheapest this year. OpenAI, Groq and a local Whisper
+server all speak the same endpoint shape.
+
+**On the phone.** Open the deployed URL in Safari, Share → Add to Home Screen, and open it from the
+icon. Do that *before* entering data: an installed web app has its own storage, separate from the
+Safari tab's, and Safari deletes a plain site's data after seven days without a visit.

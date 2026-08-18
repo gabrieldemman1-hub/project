@@ -1,4 +1,5 @@
 import type { ChangeEvent } from 'react'
+import { VoiceCapture } from './VoiceCapture'
 
 /**
  * A plain textarea, deliberately.
@@ -12,10 +13,13 @@ import type { ChangeEvent } from 'react'
 export function NoteEditor({
   value,
   onChange,
+  voice = false,
   placeholder = 'What was the most important idea in this chapter? Your own words.',
 }: {
   value: string
   onChange: (v: string) => void
+  /** Only true when the deployment actually has a transcription route. */
+  voice?: boolean
   placeholder?: string
 }) {
   return (
@@ -31,6 +35,15 @@ export function NoteEditor({
       <p className="text-xs text-ink-faint mt-1.5">
         Tap the mic on your keyboard to speak it instead.
       </p>
+      {voice && (
+        <VoiceCapture
+          onText={(text) => {
+            // Appended, never substituted. Nothing typed is overwritten.
+            const joined = value.trim() === '' ? text : `${value.trim()} ${text}`
+            onChange(joined)
+          }}
+        />
+      )}
     </div>
   )
 }
