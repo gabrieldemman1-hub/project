@@ -1,0 +1,50 @@
+/* GENERATED FROM src/styles/tokens.ts BY `npm run make-tokens`. DO NOT EDIT. */
+:root {
+  --ground: #FBFAF8;
+  --surface: #FFFFFF;
+  --surface-sunk: #F3F1ED;
+  --border: #E6E2DA;
+  --ink: #191714;
+  --ink-quiet: #6B655C;
+  --ink-faint: #8E877E;
+  --accent: #C86C10;
+  --on-accent: #1A1512;
+  --accent-ink: #A4560A;
+  --accent-soft: rgba(200, 108, 16, 0.12);
+  --good: #2E7D4F;
+  --warn: #B4342A;
+  --shadow: rgba(25, 23, 20, 0.08);
+  --overlay: rgba(25, 23, 20, 0.32);
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+  --space-2xl: 2rem;
+  --space-3xl: 3rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-full: 999px;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: 'Literata Variable', ui-serif, Georgia, 'Times New Roman', serif;
+  --touch-min: 44px;
+}
+
+[data-theme="dark"] {
+  --ground: #0C0B0A;
+  --surface: #161412;
+  --surface-sunk: #100E0D;
+  --border: #2A2622;
+  --ink: #EDE9E3;
+  --ink-quiet: #9A938A;
+  --ink-faint: #6B655C;
+  --accent: #F5A63D;
+  --on-accent: #1A1512;
+  --accent-ink: #F5A63D;
+  --accent-soft: rgba(245, 166, 61, 0.16);
+  --good: #6FD09A;
+  --warn: #F08A80;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --overlay: rgba(0, 0, 0, 0.6);
+}

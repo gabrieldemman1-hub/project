@@ -1,0 +1,115 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/literata';
+
+/*
+ * `inline` matters here: it makes the generated utilities emit var(--ground)
+ * rather than the resolved hex, which is what lets the 19:00 theme switch work
+ * by flipping one data-theme attribute instead of restyling anything.
+ */
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-border-soft: var(--border);
+  --color-ink: var(--ink);
+  --color-ink-quiet: var(--ink-quiet);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-on-accent: var(--on-accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+html,
+body,
+#root {
+  /* dvh, not vh — iOS's toolbars make vh lie. */
+  min-height: 100dvh;
+}
+
+html {
+  background: var(--ground);
+  /* Stop iOS inflating text in landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  /* Nothing rubber-bands behind the app in standalone. */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tabular figures everywhere a number changes, so digits don't jump. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.serif {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+}
+
+/* Safe areas. Without these the primary action sits under the home indicator. */
+.safe-top {
+  padding-top: max(var(--space-lg), env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(var(--space-lg), env(safe-area-inset-bottom));
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Anything under 16px makes iOS zoom the viewport on focus, and in standalone
+   it does not reliably zoom back out. Token-level rule, not per-component. */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
+}
+
+button {
+  min-height: var(--touch-min);
+  touch-action: manipulation;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
